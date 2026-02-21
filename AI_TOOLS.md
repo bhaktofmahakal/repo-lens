@@ -31,6 +31,9 @@ This file documents how AI tools were used effectively for this project, with cl
   - deployment and post-deploy checks
 - Used for grounded repo operations and verification, not generic advice only.
 
+### 4. Code-rabbit 
+- Used for review the files after commit
+
 ## Control and Accountability
 - Final architecture and product choices were made with human oversight.
 - Code and docs were validated against assignment requirements before submission.
