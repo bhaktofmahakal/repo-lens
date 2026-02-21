@@ -1,4 +1,3 @@
-/* utsav */
 module.exports = {
   plugins: {
     tailwindcss: {},
