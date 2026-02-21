@@ -1,4 +1,3 @@
-/* utsav */
 import { Chunk } from "@/types";
 
 export function buildPrompt(question: string, chunks: Chunk[]): string {
@@ -10,6 +9,7 @@ return `You are a technical Q&A assistant for codebases. Use the provided eviden
 Every claim must be backed by evidence from the provided snippets.
 For each claim, mention the file path and line range.
 Prefer explicit references in this format: [path/to/file.ext:L10-L20].
+If a documentation snippet mentions another file path, do not claim implementation details from that mentioned file unless that file is also present in evidence.
 If the evidence is insufficient to answer the question, state: "Insufficient evidence in the indexed codebase."
 Do NOT use outside knowledge. Answer ONLY based on the provided evidence.
 
