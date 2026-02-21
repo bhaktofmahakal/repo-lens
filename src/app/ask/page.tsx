@@ -1,11 +1,103 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Code2, ExternalLink, History, Loader2, Search } from "lucide-react";
-import { AskResponse, Citation } from "@/types";
+import { ArrowLeft, Code2, ExternalLink, History, Loader2, Search, Wand2 } from "lucide-react";
+import { AskResponse, Citation, RefactorResponse } from "@/types";
+
+type EvidenceTag = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+function normalizeSearchValue(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function matchesEvidence(citation: Citation, query: string): boolean {
+  if (!query) return true;
+  return (
+    citation.filePath.toLowerCase().includes(query) ||
+    citation.snippet.toLowerCase().includes(query)
+  );
+}
+
+function getFileExtension(filePath: string): string {
+  const fileName = filePath.toLowerCase().split("/").pop() || "";
+  const dotIndex = fileName.lastIndexOf(".");
+  if (dotIndex === -1 || dotIndex === fileName.length - 1) return "no-ext";
+  return fileName.slice(dotIndex + 1);
+}
+
+function getTopLevelDir(filePath: string): string {
+  const normalized = filePath
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/^\/+/, "")
+    .toLowerCase();
+  const firstSegment = normalized.split("/")[0]?.trim();
+  if (!firstSegment || firstSegment === ".") return "root";
+  return firstSegment;
+}
+
+function deriveEvidenceTags(response: AskResponse, askedQuestion: string): EvidenceTag[] {
+  const items = response.retrievedSnippets.length > 0 ? response.retrievedSnippets : response.citations;
+  if (items.length === 0) return [];
+
+  const tagMap = new Map<string, EvidenceTag>();
+  const addTag = (id: string, label: string, count = 1) => {
+    const existing = tagMap.get(id);
+    if (existing) {
+      existing.count += count;
+      return;
+    }
+    tagMap.set(id, { id, label, count });
+  };
+
+  for (const item of items) {
+    const ext = getFileExtension(item.filePath);
+    const dir = getTopLevelDir(item.filePath);
+    addTag(`ext:${ext}`, `.${ext}`);
+    addTag(`dir:${dir}`, dir);
+  }
+
+  const question = askedQuestion.toLowerCase();
+  const topicRules: Array<{ topic: string; terms: string[] }> = [
+    { topic: "auth", terms: ["auth", "login", "session", "token"] },
+    { topic: "retry", terms: ["retry", "retries", "backoff"] },
+    { topic: "db", terms: ["db", "database", "sql", "prisma", "supabase"] },
+    { topic: "api", terms: ["api", "endpoint", "route", "request"] },
+  ];
+
+  for (const rule of topicRules) {
+    if (rule.terms.some((term) => question.includes(term))) {
+      addTag(`topic:${rule.topic}`, rule.topic, 2);
+    }
+  }
+
+  return Array.from(tagMap.values())
+    .sort((a, b) => (b.count === a.count ? a.label.localeCompare(b.label) : b.count - a.count))
+    .slice(0, 10);
+}
+
+function matchesTagFilter(citation: Citation, activeTagId: string): boolean {
+  if (!activeTagId) return true;
+
+  const [kind, value] = activeTagId.split(":", 2);
+  if (!kind || !value) return true;
+
+  if (kind === "ext") return getFileExtension(citation.filePath) === value;
+  if (kind === "dir") return getTopLevelDir(citation.filePath) === value;
+  if (kind === "topic") {
+    const haystack = `${citation.filePath}\n${citation.snippet}`.toLowerCase();
+    return haystack.includes(value);
+  }
+
+  return true;
+}
 
 const markdownComponents: Components = {
   h1: ({ ...props }) => <h1 className="mb-4 mt-1 text-2xl font-semibold text-slate-50" {...props} />,
@@ -66,8 +158,14 @@ function AskContent() {
   const searchParams = useSearchParams();
   const sourceId = searchParams.get("sourceId");
   const [question, setQuestion] = useState("");
+  const [askedQuestion, setAskedQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AskResponse | null>(null);
+  const [refactorResponse, setRefactorResponse] = useState<RefactorResponse | null>(null);
+  const [refactorLoading, setRefactorLoading] = useState(false);
+  const [refactorError, setRefactorError] = useState<string | null>(null);
+  const [evidenceSearch, setEvidenceSearch] = useState("");
+  const [activeTagId, setActiveTagId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -76,6 +174,41 @@ function AskContent() {
       router.replace("/");
     }
   }, [sourceId, router]);
+
+  useEffect(() => {
+    setQuestion("");
+    setAskedQuestion("");
+    setResponse(null);
+    setRefactorResponse(null);
+    setRefactorError(null);
+    setError(null);
+    setEvidenceSearch("");
+    setActiveTagId("");
+  }, [sourceId]);
+
+  const normalizedEvidenceSearch = normalizeSearchValue(evidenceSearch);
+  const evidenceTags = useMemo(() => {
+    if (!response) return [];
+    return deriveEvidenceTags(response, askedQuestion);
+  }, [response, askedQuestion]);
+
+  const filteredCitations = useMemo(() => {
+    if (!response) return [];
+    return response.citations.filter(
+      (citation) =>
+        matchesEvidence(citation, normalizedEvidenceSearch) &&
+        matchesTagFilter(citation, activeTagId),
+    );
+  }, [response, normalizedEvidenceSearch, activeTagId]);
+
+  const filteredSnippets = useMemo(() => {
+    if (!response) return [];
+    return response.retrievedSnippets.filter(
+      (snippet) =>
+        matchesEvidence(snippet, normalizedEvidenceSearch) &&
+        matchesTagFilter(snippet, activeTagId),
+    );
+  }, [response, normalizedEvidenceSearch, activeTagId]);
 
   if (!sourceId) {
     return <div className="flex min-h-screen items-center justify-center text-slate-300">Redirecting...</div>;
@@ -99,10 +232,38 @@ function AskContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to get answer");
       setResponse(data);
+      setAskedQuestion(normalizedQuestion);
+      setEvidenceSearch("");
+      setActiveTagId("");
+      setRefactorResponse(null);
+      setRefactorError(null);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateRefactors = async () => {
+    if (!sourceId || !askedQuestion) return;
+
+    setRefactorLoading(true);
+    setRefactorError(null);
+
+    try {
+      const res = await fetch("/api/refactor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId, question: askedQuestion }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate refactor suggestions");
+      setRefactorResponse(data);
+    } catch (err: any) {
+      setRefactorError(err.message);
+    } finally {
+      setRefactorLoading(false);
     }
   };
 
@@ -182,14 +343,83 @@ function AskContent() {
                 <ExternalLink className="h-5 w-5 text-blue-300" />
                 Citations
               </h3>
-              {response.citations.length > 0 ? (
+              {filteredCitations.length > 0 ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {response.citations.map((citation, index) => (
+                  {filteredCitations.map((citation, index) => (
                     <CitationCard key={`${citation.filePath}-${citation.startLine}-${index}`} citation={citation} />
                   ))}
                 </div>
+              ) : response.citations.length > 0 ? (
+                <p className="text-sm text-slate-400">No citations match the current search.</p>
               ) : (
                 <p className="text-sm text-slate-400">No direct citations available for this answer.</p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-slate-700/90 bg-slate-900/70 p-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+                  <Wand2 className="h-5 w-5 text-violet-300" />
+                  Refactor Suggestions
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleGenerateRefactors}
+                  disabled={refactorLoading || response.retrievedSnippets.length === 0}
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 text-sm font-medium text-violet-200 transition-colors hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400"
+                >
+                  {refactorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  Generate Suggestions
+                </button>
+              </div>
+
+              {refactorError ? (
+                <p className="mb-4 rounded-lg border border-red-500/40 bg-red-900/20 p-3 text-sm text-red-200">
+                  {refactorError}
+                </p>
+              ) : null}
+
+              {refactorResponse?.suggestions?.length ? (
+                <div className="space-y-4">
+                  {refactorResponse.suggestions.map((suggestion, index) => (
+                    <article key={`${suggestion.title}-${index}`} className="rounded-xl border border-slate-700 bg-slate-950/50 p-4">
+                      <h4 className="text-base font-semibold text-slate-100">{suggestion.title}</h4>
+                      <p className="mt-2 text-sm text-slate-300">{suggestion.rationale}</p>
+                      <p className="mt-2 text-sm text-slate-400">
+                        <span className="font-semibold text-slate-300">Impact:</span> {suggestion.expectedImpact}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {suggestion.citations.map((citation, citationIndex) =>
+                          citation.sourceUrl ? (
+                            <a
+                              key={`${citation.filePath}-${citation.startLine}-${citationIndex}`}
+                              href={citation.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-blue-200 hover:border-blue-400"
+                            >
+                              {citation.filePath} L{citation.startLine}-L{citation.endLine}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ) : (
+                            <span
+                              key={`${citation.filePath}-${citation.startLine}-${citationIndex}`}
+                              className="inline-flex items-center rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-300"
+                            >
+                              {citation.filePath} L{citation.startLine}-L{citation.endLine}
+                            </span>
+                          ),
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : refactorResponse?.note_when_insufficient_evidence ? (
+                <p className="text-sm text-slate-400">{refactorResponse.note_when_insufficient_evidence}</p>
+              ) : (
+                <p className="text-sm text-slate-400">
+                  Generate grounded refactor ideas based on the currently retrieved evidence.
+                </p>
               )}
             </section>
           </div>
@@ -206,9 +436,51 @@ function AskContent() {
             <Code2 className="h-5 w-5 text-blue-300" />
             Retrieved Evidence
           </h3>
-          {response?.retrievedSnippets?.length ? (
+          {response ? (
+            <div className="mb-4">
+              <label htmlFor="evidence-search" className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Search Evidence
+              </label>
+              <input
+                id="evidence-search"
+                type="text"
+                placeholder="Filter by file or snippet text"
+                value={evidenceSearch}
+                onChange={(e) => setEvidenceSearch(e.target.value)}
+                className="mt-2 h-10 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+              />
+              {evidenceTags.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {evidenceTags.map((tag) => {
+                    const isActive = tag.id === activeTagId;
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => setActiveTagId(isActive ? "" : tag.id)}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          isActive
+                            ? "border-blue-400 bg-blue-500/20 text-blue-200"
+                            : "border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500"
+                        }`}
+                      >
+                        {tag.label}
+                        <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px]">
+                          {tag.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <p className="mt-2 text-xs text-slate-400">
+                Showing {filteredSnippets.length} of {response.retrievedSnippets.length} snippets.
+              </p>
+            </div>
+          ) : null}
+          {filteredSnippets.length ? (
             <div className="space-y-4">
-              {response.retrievedSnippets.map((snippet, index) => (
+              {filteredSnippets.map((snippet, index) => (
                 <article key={`${snippet.filePath}-${snippet.startLine}-${index}`} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950/60">
                   <header className="flex items-center justify-between gap-2 border-b border-slate-700 bg-slate-900 px-3 py-2">
                     <span className="truncate font-mono text-xs font-semibold text-slate-200">{snippet.filePath}</span>
@@ -232,6 +504,10 @@ function AskContent() {
                 </article>
               ))}
             </div>
+          ) : response ? (
+            <p className="rounded-lg border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+              No snippets match the current search.
+            </p>
           ) : (
             <p className="rounded-lg border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
               Retrieved snippets will appear here after you submit a question.
