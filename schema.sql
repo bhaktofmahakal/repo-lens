@@ -1,8 +1,5 @@
--- utsav
--- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Sources table
 CREATE TABLE IF NOT EXISTS sources (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type TEXT NOT NULL,
@@ -11,7 +8,6 @@ CREATE TABLE IF NOT EXISTS sources (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Chunks table
 CREATE TABLE IF NOT EXISTS chunks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_id UUID REFERENCES sources(id) ON DELETE CASCADE,
@@ -24,14 +20,12 @@ CREATE TABLE IF NOT EXISTS chunks (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Align embedding dimensionality with the configured model.
--- Existing embeddings are reset to NULL and can be regenerated via re-ingestion.
+-- Resets existing vectors after dimension changes.
 DROP INDEX IF EXISTS chunks_embedding_idx;
 ALTER TABLE chunks
   ALTER COLUMN embedding TYPE VECTOR(768)
   USING NULL;
 
--- QA History table
 CREATE TABLE IF NOT EXISTS qa_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_id UUID REFERENCES sources(id) ON DELETE CASCADE,
@@ -41,13 +35,8 @@ CREATE TABLE IF NOT EXISTS qa_history (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Create an IVFFlat index on chunks.embedding for cosine similarity search
--- Note: 'match_chunks' function will be used for search.
--- The number of lists (lists = 100) should be tuned based on the number of chunks.
--- For a small codebase, IVFFlat or HNSW is fine.
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
--- Match chunks function
 DROP FUNCTION IF EXISTS match_chunks(VECTOR(1024), FLOAT, INT, UUID);
 CREATE OR REPLACE FUNCTION match_chunks(
   query_embedding VECTOR(768),
