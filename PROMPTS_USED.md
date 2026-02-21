@@ -29,3 +29,8 @@
 - "Switch embedding model to `sentence-transformers/all-mpnet-base-v2` to maintain 768-dimension compatibility with `pgvector` schema."
 - "Implement keyword-based fallback (ILIKE) for retrieval when vector search returns no results."
 - "Add system health monitoring (Supabase, Groq, HF) to the Status page."
+
+## Phase 7: Optional Feature Enhancements
+- "Add evidence search on the Ask page so users can filter citations and snippets by file path or code text."
+- "Add auto-derived tags from retrieved evidence (extension/folder/topic) and make tags clickable filters."
+- "Add a refactor suggestion workflow that generates grounded suggestions with citations from retrieved snippets only."
