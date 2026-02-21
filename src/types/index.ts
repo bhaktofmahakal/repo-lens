@@ -33,6 +33,18 @@ export interface AskResponse {
   note_when_insufficient_evidence?: string;
 }
 
+export interface RefactorSuggestion {
+  title: string;
+  rationale: string;
+  expectedImpact: string;
+  citations: Citation[];
+}
+
+export interface RefactorResponse {
+  suggestions: RefactorSuggestion[];
+  note_when_insufficient_evidence?: string;
+}
+
 export interface IngestResult {
   sourceId: string;
   fileCount: number;
