@@ -31,3 +31,5 @@ build
 
 # local scratch artifacts
 .tmp-tests
+
+.vercel
