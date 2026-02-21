@@ -1,4 +1,3 @@
-/* utsav */
 import { config } from "@/lib/config";
 import { Chunk, Citation } from "@/types";
 
