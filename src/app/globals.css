@@ -1,22 +1,47 @@
-/* utsav */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #020617;
+  --foreground: #e2e8f0;
+  --surface: #0f172a;
+  --surface-soft: #111c33;
+  --stroke: #1e293b;
+  --accent: #2563eb;
+  --accent-soft: #60a5fa;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #020617;
+    --foreground: #e2e8f0;
+    --surface: #0f172a;
+    --surface-soft: #111c33;
+    --stroke: #1e293b;
+    --accent: #2563eb;
+    --accent-soft: #60a5fa;
   }
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(30, 64, 175, 0.35), transparent 60%),
+    radial-gradient(900px 500px at 90% -20%, rgba(14, 116, 144, 0.28), transparent 55%),
+    var(--background);
+  font-family: var(--font-heading), "Segoe UI", sans-serif;
+}
+
+code,
+pre {
+  font-family: var(--font-mono), "Cascadia Code", monospace;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
 }
