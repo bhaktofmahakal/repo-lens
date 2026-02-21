@@ -12,32 +12,40 @@ export async function POST(req: NextRequest) {
   try {
     const { question, sourceId } = await req.json();
 
-    if (!question || !sourceId) {
+    const normalizedQuestion = typeof question === "string" ? question.trim() : "";
+    if (!normalizedQuestion || !sourceId) {
       return NextResponse.json({ error: "Question and Source ID are required." }, { status: 400 });
     }
 
     // Generate embedding for the question
     let queryEmbedding: number[] | undefined;
     try {
-      queryEmbedding = await embedSingle(question);
+      queryEmbedding = await embedSingle(normalizedQuestion);
     } catch (error) {
       console.error("Embedding error:", error);
     }
 
     // Retrieve relevant chunks
-    const chunks = await hybridSearch(sourceId, question, queryEmbedding);
+    const chunks = await hybridSearch(sourceId, normalizedQuestion, queryEmbedding);
 
     if (chunks.length === 0) {
       return NextResponse.json({
-        answer: "No relevant code found for the question.",
+        answer: "Insufficient evidence in the indexed codebase.",
         citations: [],
         retrievedSnippets: [],
+        note_when_insufficient_evidence: "No indexed chunks were retrieved for this question.",
       });
     }
 
-    // Generate answer
-    const prompt = buildPrompt(question, chunks);
-    const answer = await generateAnswer(prompt);
+    let answer = "Insufficient evidence in the indexed codebase.";
+    try {
+      const prompt = buildPrompt(normalizedQuestion, chunks);
+      answer = await generateAnswer(prompt);
+    } catch (error) {
+      console.error("LLM answer generation failed:", error);
+      answer =
+        "Insufficient evidence in the indexed codebase. Retrieved snippets are provided below for manual verification.";
+    }
 
     // Extract citations
     const citations = extractCitations(answer, chunks);
@@ -46,7 +54,7 @@ export async function POST(req: NextRequest) {
     // Save history
     const { error: historyError } = await supabase.from("qa_history").insert({
       source_id: sourceId,
-      question,
+      question: normalizedQuestion,
       answer,
       citations_json: citations,
     });
@@ -60,6 +68,9 @@ export async function POST(req: NextRequest) {
       citations,
       retrievedSnippets,
     };
+    if (citations.length === 0) {
+      response.note_when_insufficient_evidence = "No citable chunks were available for this answer.";
+    }
 
     return NextResponse.json(response);
   } catch (error: any) {

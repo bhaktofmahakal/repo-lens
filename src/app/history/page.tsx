@@ -3,7 +3,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Calendar, MessageSquare, ExternalLink } from "lucide-react";
+import { ArrowLeft, Loader2, Calendar, MessageSquare } from "lucide-react";
 import { QAHistory } from "@/types";
 
 function HistoryContent() {
@@ -13,6 +13,13 @@ function HistoryContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!sourceId) {
+      router.replace("/");
+      setLoading(false);
+    }
+  }, [sourceId, router]);
 
   useEffect(() => {
     if (!sourceId) return;
@@ -34,8 +41,7 @@ function HistoryContent() {
   }, [sourceId]);
 
   if (!sourceId) {
-    router.push("/");
-    return null;
+    return <div className="flex items-center justify-center min-h-screen">Redirecting...</div>;
   }
 
   return (

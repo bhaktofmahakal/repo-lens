@@ -1,13 +1,56 @@
 /* utsav */
 import { HfInference } from "@huggingface/inference";
+import { config, isConfiguredEnvValue } from "@/lib/config";
 
 const HF_TOKEN = process.env.HF_TOKEN;
-const MODEL_ID = "sentence-transformers/all-mpnet-base-v2";
+const MODEL_ID = process.env.HF_EMBEDDING_MODEL || "sentence-transformers/all-mpnet-base-v2";
 
 const hf = new HfInference(HF_TOKEN);
 
+function normalizeFeatureExtractionResult(result: unknown): number[][] {
+  if (!Array.isArray(result)) {
+    throw new Error(`Unexpected result from HF SDK: ${JSON.stringify(result)}`);
+  }
+
+  if (result.length === 0) return [];
+
+  // Single vector shape: number[]
+  if (typeof result[0] === "number") {
+    return [result as number[]];
+  }
+
+  return (result as unknown[]).map((item) => {
+    if (!Array.isArray(item)) {
+      throw new Error(`Unexpected embedding item shape: ${JSON.stringify(item)}`);
+    }
+
+    // Sentence embedding: number[]
+    if (typeof item[0] === "number") {
+      return item as number[];
+    }
+
+    // Token embeddings: number[][] -> mean pooling
+    if (Array.isArray(item[0])) {
+      const tokenVectors = item as number[][];
+      const dim = tokenVectors[0]?.length || 0;
+      if (!dim) return [];
+
+      const pooled = new Array(dim).fill(0);
+      for (const token of tokenVectors) {
+        for (let i = 0; i < dim; i++) {
+          pooled[i] += token[i] ?? 0;
+        }
+      }
+
+      return pooled.map((value) => value / tokenVectors.length);
+    }
+
+    throw new Error(`Unsupported embedding shape from HF SDK: ${JSON.stringify(item)}`);
+  });
+}
+
 export async function embedTexts(texts: string[]): Promise<number[][]> {
-  if (!HF_TOKEN || HF_TOKEN === 'placeholder') {
+  if (!isConfiguredEnvValue(HF_TOKEN)) {
     throw new Error("Missing HF_TOKEN environment variable.");
   }
 
@@ -27,26 +70,14 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
           model: MODEL_ID,
           inputs: batch,
         });
-        
-        // HF SDK returns number[][] or number[][][] (for sequence tokens) or number[]
-        if (!Array.isArray(result)) {
-            throw new Error(`Unexpected result from HF SDK: ${JSON.stringify(result)}`);
-        }
 
-        // Handle different possible shapes from SDK
-        const batchEmbeddings: number[][] = result.map((item: any) => {
-            if (Array.isArray(item)) {
-                // If it's number[][] (sequence), mean-pool or take first token? 
-                // Feature extraction usually returns [batch, seq, dim] if not pooled
-                // But for sentence-transformers it usually returns [batch, dim]
-                if (Array.isArray(item[0])) {
-                   // Sequence output [seq, dim] -> take first token (CLS) or average
-                   return item[0]; 
-                }
-                return item;
-            }
-            return [item]; // Single number? Should not happen for embeddings
-        });
+        const batchEmbeddings = normalizeFeatureExtractionResult(result);
+        const wrongDim = batchEmbeddings.find((vector) => vector.length !== config.embeddingDimension);
+        if (wrongDim) {
+          throw new Error(
+            `Embedding dimension mismatch. Expected ${config.embeddingDimension}, got ${wrongDim.length}.`,
+          );
+        }
 
         allEmbeddings.push(...batchEmbeddings);
         break; // Success

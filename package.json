@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.12",
@@ -33,6 +34,7 @@
     "eslint-config-next": "15.1.7",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.5",
     "typescript": "^5.7.3"
   }
 }

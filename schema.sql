@@ -19,10 +19,17 @@ CREATE TABLE IF NOT EXISTS chunks (
   start_line INTEGER NOT NULL,
   end_line INTEGER NOT NULL,
   content TEXT NOT NULL,
-  embedding VECTOR(1024),
+  embedding VECTOR(768),
   source_url TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Align embedding dimensionality with the configured model.
+-- Existing embeddings are reset to NULL and can be regenerated via re-ingestion.
+DROP INDEX IF EXISTS chunks_embedding_idx;
+ALTER TABLE chunks
+  ALTER COLUMN embedding TYPE VECTOR(768)
+  USING NULL;
 
 -- QA History table
 CREATE TABLE IF NOT EXISTS qa_history (
@@ -38,11 +45,12 @@ CREATE TABLE IF NOT EXISTS qa_history (
 -- Note: 'match_chunks' function will be used for search.
 -- The number of lists (lists = 100) should be tuned based on the number of chunks.
 -- For a small codebase, IVFFlat or HNSW is fine.
-CREATE INDEX ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- Match chunks function
+DROP FUNCTION IF EXISTS match_chunks(VECTOR(1024), FLOAT, INT, UUID);
 CREATE OR REPLACE FUNCTION match_chunks(
-  query_embedding VECTOR(1024),
+  query_embedding VECTOR(768),
   match_threshold FLOAT,
   match_count INT,
   p_source_id UUID
@@ -70,6 +78,7 @@ BEGIN
     1 - (chunks.embedding <=> query_embedding) AS similarity
   FROM chunks
   WHERE chunks.source_id = p_source_id
+    AND chunks.embedding IS NOT NULL
     AND 1 - (chunks.embedding <=> query_embedding) > match_threshold
   ORDER BY chunks.embedding <=> query_embedding
   LIMIT match_count;

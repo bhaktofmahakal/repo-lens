@@ -39,17 +39,25 @@ export async function ingestZip(buffer: Buffer, sourceId: string): Promise<Inges
   }
 
   if (allChunks.length > 0) {
-    // Generate embeddings
-    const textsToEmbed = allChunks.map(c => c.content);
-    const embeddings = await embedTexts(textsToEmbed);
-    
-    // Attach embeddings to chunks
+    const textsToEmbed = allChunks.map((chunk) => chunk.content);
+    let embeddings: number[][] | null = null;
+
+    try {
+      embeddings = await embedTexts(textsToEmbed);
+      if (embeddings.length !== allChunks.length) {
+        throw new Error(`Embedding result count mismatch: expected ${allChunks.length}, got ${embeddings.length}.`);
+      }
+    } catch (error) {
+      console.error("Embedding generation failed during ZIP ingest. Continuing with lexical fallback:", error);
+      embeddings = null;
+    }
+
     const chunksWithEmbeddings = allChunks.map((c, i) => ({
       ...c,
       file_path: sanitizeForDatabase(c.file_path),
       content: sanitizeForDatabase(c.content),
       source_url: c.source_url ? sanitizeForDatabase(c.source_url) : null,
-      embedding: embeddings[i],
+      embedding: embeddings ? embeddings[i] : null,
     }));
 
     const { error } = await supabase.from('chunks').insert(chunksWithEmbeddings);

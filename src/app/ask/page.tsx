@@ -4,7 +4,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Loader2, ArrowLeft, ExternalLink, Code, History } from "lucide-react";
-import { AskResponse, Citation } from "@/types";
+import { AskResponse } from "@/types";
 
 function AskContent() {
   const searchParams = useSearchParams();
@@ -15,9 +15,14 @@ function AskContent() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  useEffect(() => {
+    if (!sourceId) {
+      router.replace("/");
+    }
+  }, [sourceId, router]);
+
   if (!sourceId) {
-    router.push("/");
-    return null;
+    return <div className="flex items-center justify-center min-h-screen">Redirecting...</div>;
   }
 
   const handleAsk = async (e: React.FormEvent) => {
