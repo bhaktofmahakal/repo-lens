@@ -1,4 +1,3 @@
-/* utsav */
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { checkGroqHealth } from "@/lib/qa/groq";
