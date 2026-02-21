@@ -1,4 +1,3 @@
-/* utsav */
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -45,12 +44,15 @@ function HistoryContent() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <header className="flex items-center gap-4 mb-12">
-        <button onClick={() => router.push(`/ask?sourceId=${sourceId}`)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+    <div className="mx-auto max-w-4xl px-4 py-8">
+      <header className="mb-10 flex items-center gap-4 rounded-2xl border border-slate-700/80 bg-slate-900/70 p-4">
+        <button
+          onClick={() => router.push(`/ask?sourceId=${sourceId}`)}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+        >
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h1 className="text-3xl font-bold">QA History</h1>
+        <h1 className="text-3xl font-semibold text-white">QA History</h1>
       </header>
 
       {loading && (
@@ -60,26 +62,26 @@ function HistoryContent() {
       )}
 
       {error && (
-        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+        <div className="rounded-lg border border-red-500/40 bg-red-900/20 p-4 text-red-200">
           {error}
         </div>
       )}
 
       {!loading && history.length === 0 && (
-        <div className="text-center py-20 opacity-60 italic text-xl">
+        <div className="py-20 text-center text-xl italic text-slate-400">
           No history found for this codebase.
         </div>
       )}
 
       <div className="space-y-8">
         {history.map((item, idx) => (
-          <article key={item.id} className="p-6 border rounded-xl shadow-sm bg-white dark:bg-slate-900">
-            <header className="flex items-center justify-between mb-4 border-b pb-2">
-              <span className="text-sm opacity-60 flex items-center gap-2">
+          <article key={item.id} className="rounded-xl border border-slate-700 bg-slate-900/70 p-6">
+            <header className="mb-4 flex items-center justify-between border-b border-slate-700 pb-2">
+              <span className="flex items-center gap-2 text-sm text-slate-400">
                 <Calendar className="w-4 h-4" />
                 {new Date(item.created_at).toLocaleString()}
               </span>
-              <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+              <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300">
                 #{history.length - idx}
               </span>
             </header>
@@ -88,18 +90,18 @@ function HistoryContent() {
               <div className="flex gap-3">
                 <MessageSquare className="w-5 h-5 shrink-0 mt-1 opacity-60" />
                 <div>
-                  <h3 className="font-semibold text-lg">{item.question}</h3>
-                  <div className="mt-4 text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                  <h3 className="text-lg font-semibold text-white">{item.question}</h3>
+                  <div className="mt-4 whitespace-pre-wrap leading-relaxed text-slate-200">
                     {item.answer}
                   </div>
                 </div>
               </div>
 
               {item.citations_json && item.citations_json.length > 0 && (
-                <div className="pt-4 flex flex-wrap gap-2 border-t">
-                  <span className="text-sm font-semibold w-full mb-1">Citations:</span>
+                <div className="flex flex-wrap gap-2 border-t border-slate-700 pt-4">
+                  <span className="mb-1 w-full text-sm font-semibold text-slate-200">Citations:</span>
                   {item.citations_json.map((cit, cidx) => (
-                    <div key={cidx} className="bg-slate-50 dark:bg-slate-800 border rounded px-2 py-1 text-xs font-mono">
+                    <div key={cidx} className="rounded border border-slate-700 bg-slate-950/70 px-2 py-1 text-xs font-mono text-slate-300">
                       {cit.filePath} (L{cit.startLine}-{cit.endLine})
                     </div>
                   ))}
