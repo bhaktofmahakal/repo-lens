@@ -1,4 +1,3 @@
-/* utsav */
 import { HfInference } from "@huggingface/inference";
 import { config, isConfiguredEnvValue } from "@/lib/config";
 
@@ -14,7 +13,6 @@ function normalizeFeatureExtractionResult(result: unknown): number[][] {
 
   if (result.length === 0) return [];
 
-  // Single vector shape: number[]
   if (typeof result[0] === "number") {
     return [result as number[]];
   }
@@ -24,12 +22,10 @@ function normalizeFeatureExtractionResult(result: unknown): number[][] {
       throw new Error(`Unexpected embedding item shape: ${JSON.stringify(item)}`);
     }
 
-    // Sentence embedding: number[]
     if (typeof item[0] === "number") {
       return item as number[];
     }
 
-    // Token embeddings: number[][] -> mean pooling
     if (Array.isArray(item[0])) {
       const tokenVectors = item as number[][];
       const dim = tokenVectors[0]?.length || 0;
@@ -54,7 +50,6 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     throw new Error("Missing HF_TOKEN environment variable.");
   }
 
-  // Batch texts (max 32 per request)
   const BATCH_SIZE = 32;
   const allEmbeddings: number[][] = [];
 
@@ -80,10 +75,10 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
         }
 
         allEmbeddings.push(...batchEmbeddings);
-        break; // Success
+        break;
       } catch (error: any) {
         if (error?.status === 503) {
-          // Model loading, wait and retry
+          // HF can return 503 while the model is warming up.
           retryCount++;
           await new Promise(resolve => setTimeout(resolve, 10000));
           continue;
