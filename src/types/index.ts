@@ -1,4 +1,3 @@
-/* utsav */
 export interface Source {
   id: string;
   type: 'zip' | 'github';
