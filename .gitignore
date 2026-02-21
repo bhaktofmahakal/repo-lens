@@ -28,3 +28,6 @@ Thumbs.db
 coverage
 dist
 build
+
+# local scratch artifacts
+.tmp-tests
