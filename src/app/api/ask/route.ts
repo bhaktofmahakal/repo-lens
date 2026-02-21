@@ -8,6 +8,40 @@ import { supabase } from "@/lib/db";
 import { AskResponse } from "@/types";
 
 const INSUFFICIENT_EVIDENCE_PREFIX = "insufficient evidence in the indexed codebase";
+const QUESTION_STOPWORDS = new Set([
+  "the",
+  "is",
+  "are",
+  "was",
+  "were",
+  "how",
+  "what",
+  "where",
+  "when",
+  "why",
+  "which",
+  "who",
+  "whom",
+  "whose",
+  "a",
+  "an",
+  "of",
+  "to",
+  "for",
+  "from",
+  "in",
+  "on",
+  "by",
+  "with",
+  "and",
+  "or",
+  "as",
+  "it",
+  "this",
+  "that",
+  "implemented",
+  "handled",
+]);
 
 function buildSnippetPreview(snippet: string): string {
   const oneLine = snippet.replace(/\s+/g, " ").trim();
@@ -15,12 +49,73 @@ function buildSnippetPreview(snippet: string): string {
   return `${oneLine.slice(0, 157)}...`;
 }
 
+function extractQuestionTerms(question: string): string[] {
+  return question
+    .toLowerCase()
+    .replace(/[^\w\s./:-]/g, " ")
+    .split(/\s+/)
+    .filter((term) => term.length > 2 && !QUESTION_STOPWORDS.has(term));
+}
+
+function rankSnippetForQuestion(
+  snippet: ReturnType<typeof formatRetrievedSnippets>[number],
+  terms: string[],
+  questionLower: string,
+): number {
+  const path = snippet.filePath.toLowerCase();
+  const content = snippet.snippet.toLowerCase();
+  const asksStyling = /\b(style|styling|theme|dark mode|dark|css|ui|color|colors|class)\b/i.test(questionLower);
+
+  let score = 0;
+  for (const term of terms) {
+    if (path.includes(term)) score += 3;
+    if (content.includes(term)) score += 1;
+  }
+
+  if (asksStyling) {
+    if (path.endsWith(".css") || path.endsWith(".scss") || path.endsWith(".sass") || path.endsWith(".less")) {
+      score += 5;
+    }
+    if (path.endsWith(".html") || path.endsWith(".tsx") || path.endsWith(".jsx")) {
+      score += 2;
+    }
+    if (content.includes(":root") || content.includes("background") || content.includes("color:")) {
+      score += 2;
+    }
+  }
+
+  return score;
+}
+
+function selectFallbackSnippets(
+  question: string,
+  snippets: ReturnType<typeof formatRetrievedSnippets>,
+): ReturnType<typeof formatRetrievedSnippets> {
+  if (snippets.length <= 3) return snippets;
+
+  const questionLower = question.toLowerCase();
+  const terms = extractQuestionTerms(question);
+  const ranked = snippets
+    .map((snippet, index) => ({
+      snippet,
+      score: rankSnippetForQuestion(snippet, terms, questionLower),
+      index,
+    }))
+    .sort((a, b) => (b.score === a.score ? a.index - b.index : b.score - a.score));
+
+  const hasPositiveMatch = ranked.some((item) => item.score > 0);
+  const base = hasPositiveMatch ? ranked.filter((item) => item.score > 0) : ranked;
+  const selected = base.slice(0, 3).map((item) => item.snippet);
+
+  return selected.length > 0 ? selected : snippets.slice(0, 3);
+}
+
 function buildEvidenceBackedFallbackAnswer(
   question: string,
   snippets: ReturnType<typeof formatRetrievedSnippets>,
 ): string {
-  const lines = snippets
-    .slice(0, 3)
+  const selectedSnippets = selectFallbackSnippets(question, snippets);
+  const lines = selectedSnippets
     .map(
       (snippet) =>
         `- [${snippet.filePath}:L${snippet.startLine}-L${snippet.endLine}] ${buildSnippetPreview(snippet.snippet)}`,
