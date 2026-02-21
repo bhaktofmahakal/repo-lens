@@ -87,6 +87,9 @@ Repo Lens is built to be deployed on Vercel or any Next.js-compatible platform. 
 - **Selected Option**: Option B
 - **Live URL**: https://repo-lens-gamma.vercel.app
 - **GitHub URL**: https://github.com/bhaktofmahakal/repo-lens
+- **AI Notes**: `AI_NOTES.md`
+- **Prompts Log**: `PROMPTS_USED.md`
+- **About Me**: `ABOUTME.md`
 
 ## Author
 
