@@ -1,8 +1,13 @@
-/* utsav */
 import AdmZip from "adm-zip";
 import { supabase } from "@/lib/db";
 import { config } from "@/lib/config";
-import { isBinaryFile, isIgnoredPath, isProbablyBinaryContent, sanitizeForDatabase } from "./filters";
+import {
+  isBinaryFile,
+  isIgnoredPath,
+  isProbablyBinaryContent,
+  isSupportedTextFile,
+  sanitizeForDatabase,
+} from "./filters";
 import { chunkFile } from "./chunker";
 import { embedTexts } from "@/lib/embeddings/hf";
 import { IngestResult } from "@/types";
@@ -17,8 +22,8 @@ export async function ingestZip(buffer: Buffer, sourceId: string): Promise<Inges
 
   for (const entry of zipEntries) {
     if (entry.isDirectory) continue;
-    if (isBinaryFile(entry.name) || isIgnoredPath(entry.entryName)) continue;
-    if (entry.entryName.includes('..')) continue; // Path traversal guard
+    if (isBinaryFile(entry.name) || !isSupportedTextFile(entry.entryName) || isIgnoredPath(entry.entryName)) continue;
+    if (entry.entryName.includes('..')) continue; // Blocks zip-slip paths.
 
     const rawContent = entry.getData().toString('utf8');
     if (isProbablyBinaryContent(rawContent)) continue;
@@ -34,7 +39,8 @@ export async function ingestZip(buffer: Buffer, sourceId: string): Promise<Inges
     }
 
     const filePath = sanitizeForDatabase(entry.entryName);
-    const fileChunks = chunkFile(filePath, content);
+    const sourceUrl = `/source?sourceId=${sourceId}&path=${encodeURIComponent(filePath)}`;
+    const fileChunks = chunkFile(filePath, content, sourceUrl);
     allChunks.push(...fileChunks.map(c => ({ ...c, source_id: sourceId })));
   }
 
