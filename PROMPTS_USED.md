@@ -34,3 +34,10 @@
 - "Add evidence search on the Ask page so users can filter citations and snippets by file path or code text."
 - "Add auto-derived tags from retrieved evidence (extension/folder/topic) and make tags clickable filters."
 - "Add a refactor suggestion workflow that generates grounded suggestions with citations from retrieved snippets only."
+
+## Phase 8: Planning and Documentation
+- "Use Traycer Phase Mode to break this assignment into architecture-driven phases and validate tradeoffs before coding."
+- "Define safe implementation order so optional features do not break required flows."
+- "Update README with final implemented scope, deployment links, and submission details."
+- "Update ABOUTME with identity and professional profile links."
+- "Create AI_TOOLS.md summarizing which AI tools were used and how they were used effectively."

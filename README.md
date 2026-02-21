@@ -76,8 +76,21 @@ Repo Lens is a codebase Q&A web application that provides verifiable, citation-b
 
 Repo Lens is built to be deployed on Vercel or any Next.js-compatible platform. Ensure all environment variables are correctly configured in your hosting environment.
 
+## Optional Feature Notes
+
+- Evidence search is client-side and filters current citations/snippets in the Ask screen.
+- Tags are derived from retrieved evidence (extension/folder/topic hints) and work as quick filters.
+- Refactor suggestions are generated from retrieved evidence and are citation-grounded.
+
 ## Submission Details
 
 - **Selected Option**: Option B
-- **Live URL**: [Link to live app]
-- **GitHub URL**: [Link to public repo]
+- **Live URL**: https://repo-lens-gamma.vercel.app
+- **GitHub URL**: https://github.com/bhaktofmahakal/repo-lens
+
+## Author
+
+- **Name**: Utsav Mishra
+- **Email**: utsavmishraa005@gmail.com
+- **GitHub**: https://github.com/bhaktofmahakal
+- **LinkedIn**: https://linkedin.com/utsav-mishra1

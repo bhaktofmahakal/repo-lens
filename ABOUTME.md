@@ -1,8 +1,7 @@
 # About Me
 
-- **Name**: [Placeholder]
-- **Resume**: [Link to Resume]
-- **GitHub**: [Link to GitHub]
-- **LinkedIn**: [Link to LinkedIn]
-- **Role**: Full-Stack Web Development Agent
-- **Specialization**: AI-Integrated Applications, Next.js, RAG Systems.
+- **Name**: Utsav Mishra
+- **Email**: utsavmishraa005@gmail.com
+- **GitHub**: https://github.com/bhaktofmahakal
+- **LinkedIn**: https://linkedin.com/utsav-mishra1
+- **Resume**: Add your resume link here
