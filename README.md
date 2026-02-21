@@ -18,6 +18,10 @@ Repo Lens is a codebase Q&A web application that provides verifiable, citation-b
   - Answers include file paths and line ranges.
   - Separate evidence panel displays retrieved code snippets.
   - Clickable source links to original files.
+- **Optional Enhancements**:
+  - Search within retrieved evidence (file/snippet text filter).
+  - Auto-derived evidence tags (file extension, folder, and topic hints).
+  - Grounded refactor suggestions generated from retrieved snippets.
 - **Interaction History**:
   - Displays the last 10 Q&A interactions for the ingested codebase.
 - **System Health**:
@@ -28,7 +32,7 @@ Repo Lens is a codebase Q&A web application that provides verifiable, citation-b
 - Private repository authentication (public only).
 - Large monorepo optimizations (size limits are enforced).
 - Multi-tenant user authentication or team permissions.
-- Advanced reranking or semantic search fallback (uses vector search).
+- Auto-apply refactor edits (suggestions only).
 
 ## Tech Stack
 
