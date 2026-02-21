@@ -1,10 +1,9 @@
-/* utsav */
 import { config } from "@/lib/config";
 import { Chunk } from "@/types";
 
 export function chunkFile(filePath: string, content: string, sourceUrl?: string): Partial<Chunk>[] {
   if (content.length > config.maxFileChars) {
-    return []; // Skip files that are too large
+    return [];
   }
 
   const lines = content.split('\n');
