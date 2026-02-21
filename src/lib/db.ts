@@ -1,4 +1,3 @@
-/* utsav */
 import { createClient } from "@supabase/supabase-js";
 import { isConfiguredEnvValue } from "@/lib/config";
 
