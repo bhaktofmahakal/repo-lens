@@ -1,4 +1,3 @@
-/* utsav */
 import Groq from "groq-sdk";
 import { isConfiguredEnvValue } from "@/lib/config";
 
