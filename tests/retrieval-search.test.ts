@@ -15,3 +15,12 @@ test("buildFallbackOrFilter sanitizes dangerous characters", () => {
 
   assert.equal(filter.includes("'"), false);
 });
+
+test("buildFallbackOrFilter drops common stopwords for broad questions", () => {
+  const filter = buildFallbackOrFilter("how university data is coming");
+
+  assert.equal(filter.includes("%how%"), false);
+  assert.equal(filter.includes("%is%"), false);
+  assert.ok(filter.includes("%university%"));
+  assert.ok(filter.includes("%data%"));
+});
