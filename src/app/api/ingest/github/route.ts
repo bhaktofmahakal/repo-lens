@@ -1,4 +1,3 @@
-/* utsav */
 import { NextRequest, NextResponse } from "next/server";
 import { ingestGitHub } from "@/lib/ingestion/github";
 import { supabase } from "@/lib/db";
@@ -48,6 +47,15 @@ export async function POST(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid GitHub repository URL." }, { status: 400 });
     }
+
+    const githubStatus = Number(error?.status || error?.response?.status || 0);
+    if (githubStatus === 404 || githubStatus === 403) {
+      return NextResponse.json(
+        { error: "Repository not found or inaccessible. Only public GitHub repositories are supported." },
+        { status: 400 },
+      );
+    }
+
     return NextResponse.json({ error: error.message || "Failed to ingest GitHub repo" }, { status: 500 });
   }
 }
