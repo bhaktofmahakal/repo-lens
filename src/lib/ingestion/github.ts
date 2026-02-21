@@ -1,14 +1,19 @@
-/* utsav */
 import { Octokit } from "@octokit/rest";
 import { supabase } from "@/lib/db";
 import { config } from "@/lib/config";
-import { isBinaryFile, isIgnoredPath, isProbablyBinaryContent, sanitizeForDatabase } from "./filters";
+import {
+  isBinaryFile,
+  isIgnoredPath,
+  isProbablyBinaryContent,
+  isSupportedTextFile,
+  sanitizeForDatabase,
+} from "./filters";
 import { chunkFile } from "./chunker";
 import { embedTexts } from "@/lib/embeddings/hf";
 import { IngestResult } from "@/types";
 
 const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN, // Optional token
+  auth: process.env.GITHUB_TOKEN,
 });
 
 export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<IngestResult> {
@@ -21,7 +26,6 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
     throw new Error("Private repositories are not supported.");
   }
 
-  // Use octokit to list all files recursively
   const { data: tree } = await octokit.git.getTree({
     owner,
     repo,
@@ -34,7 +38,7 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
   const allChunks: any[] = [];
   const blobEntries = tree.tree.filter((entry) => {
     if (entry.type !== "blob" || !entry.path) return false;
-    return !isBinaryFile(entry.path) && !isIgnoredPath(entry.path);
+    return !isBinaryFile(entry.path) && isSupportedTextFile(entry.path) && !isIgnoredPath(entry.path);
   });
 
   let limitReached = false;
