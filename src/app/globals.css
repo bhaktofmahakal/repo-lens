@@ -3,33 +3,20 @@
 @tailwind utilities;
 
 :root {
-  --background: #020617;
-  --foreground: #e2e8f0;
-  --surface: #0f172a;
-  --surface-soft: #111c33;
-  --stroke: #1e293b;
-  --accent: #2563eb;
-  --accent-soft: #60a5fa;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #020617;
-    --foreground: #e2e8f0;
-    --surface: #0f172a;
-    --surface-soft: #111c33;
-    --stroke: #1e293b;
-    --accent: #2563eb;
-    --accent-soft: #60a5fa;
-  }
+  --background: #0e0e0e;
+  --foreground: #e8e8e8;
+  --surface: #1a1a1a;
+  --surface-soft: #1e1e1e;
+  --stroke: #2a2a2a;
+  --accent: #f04d26;
+  --accent-soft: #ff6e4a;
+  --muted: #7d7d87;
+  --canvas: #151515;
 }
 
 body {
   color: var(--foreground);
-  background:
-    radial-gradient(1200px 600px at 15% -10%, rgba(30, 64, 175, 0.35), transparent 60%),
-    radial-gradient(900px 500px at 90% -20%, rgba(14, 116, 144, 0.28), transparent 55%),
-    var(--background);
+  background: var(--canvas);
   font-family: var(--font-heading), "Segoe UI", sans-serif;
 }
 
@@ -44,4 +31,16 @@ input:focus-visible,
 textarea:focus-visible {
   outline: 2px solid var(--accent-soft);
   outline-offset: 2px;
+}
+
+/* Reduced-motion baseline — disables all transitions/animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
