@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Code2, ExternalLink, History, Loader2, Search, Wand2 } from "lucide-react";
+import { ArrowLeft, Code2, ExternalLink, Github, History, Loader2, Search, Upload, Wand2 } from "lucide-react";
 import { AskResponse, Citation, RefactorResponse } from "@/types";
 
 type EvidenceTag = {
@@ -100,29 +100,29 @@ function matchesTagFilter(citation: Citation, activeTagId: string): boolean {
 }
 
 const markdownComponents: Components = {
-  h1: ({ ...props }) => <h1 className="mb-4 mt-1 text-2xl font-semibold text-slate-50" {...props} />,
-  h2: ({ ...props }) => <h2 className="mb-3 mt-6 text-xl font-semibold text-slate-100" {...props} />,
-  h3: ({ ...props }) => <h3 className="mb-3 mt-5 text-lg font-semibold text-slate-100" {...props} />,
-  p: ({ ...props }) => <p className="mb-4 leading-7 text-slate-200" {...props} />,
-  ul: ({ ...props }) => <ul className="mb-4 list-disc space-y-2 pl-6 text-slate-200" {...props} />,
-  ol: ({ ...props }) => <ol className="mb-4 list-decimal space-y-2 pl-6 text-slate-200" {...props} />,
+  h1: ({ ...props }) => <h1 className="mb-4 mt-1 text-2xl font-semibold text-white" {...props} />,
+  h2: ({ ...props }) => <h2 className="mb-3 mt-6 text-xl font-semibold text-white/90" {...props} />,
+  h3: ({ ...props }) => <h3 className="mb-3 mt-5 text-lg font-semibold text-white/90" {...props} />,
+  p: ({ ...props }) => <p className="mb-4 leading-7 text-white/75" {...props} />,
+  ul: ({ ...props }) => <ul className="mb-4 list-disc space-y-2 pl-6 text-white/75" {...props} />,
+  ol: ({ ...props }) => <ol className="mb-4 list-decimal space-y-2 pl-6 text-white/75" {...props} />,
   li: ({ ...props }) => <li className="leading-7" {...props} />,
   a: ({ ...props }) => (
-    <a className="text-blue-300 underline underline-offset-2 transition-colors hover:text-blue-200" {...props} />
+    <a className="text-[#F04D26] underline underline-offset-2 transition-colors hover:text-[#ff6e4a]" {...props} />
   ),
-  pre: ({ ...props }) => <pre className="mb-4 overflow-x-auto rounded-xl border border-slate-700 bg-slate-950 p-4" {...props} />,
+  pre: ({ ...props }) => <pre className="mb-4 overflow-x-auto rounded-xl border border-white/10 bg-[#0e0e0e] p-4" {...props} />,
   code: ({ className, children, ...props }) => {
     const isBlockCode = typeof className === "string" && className.length > 0;
     if (isBlockCode) {
       return (
-        <code className={`${className} text-sm text-slate-100`} {...props}>
+        <code className={`${className} text-sm text-white/85`} {...props}>
           {children}
         </code>
       );
     }
 
     return (
-      <code className="rounded bg-slate-800 px-1.5 py-1 text-[0.9em] text-blue-200" {...props}>
+      <code className="rounded bg-[#1a1a1a] px-1.5 py-1 text-[0.9em] text-[#F04D26]" {...props}>
         {children}
       </code>
     );
@@ -136,21 +136,154 @@ function CitationCard({ citation }: { citation: Citation }) {
       {...(citation.sourceUrl
         ? { href: citation.sourceUrl, target: "_blank", rel: "noopener noreferrer" }
         : {})}
-      className="group block rounded-xl border border-slate-700/90 bg-slate-900/80 p-4 transition-colors hover:border-blue-400/70"
+      className="group block rounded-xl border border-white/[0.07] bg-[#1a1a1a] p-4 transition-colors hover:border-[#F04D26]/40"
     >
       <div className="mb-2 flex items-start justify-between gap-3">
-        <span className="truncate font-mono text-xs font-semibold text-slate-200">{citation.filePath}</span>
-        <span className="shrink-0 rounded bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300">
+        <span className="truncate font-mono text-xs font-semibold text-white/85">{citation.filePath}</span>
+        <span className="shrink-0 rounded bg-[#0e0e0e] px-2 py-1 text-[11px] font-medium text-white/60">
           L{citation.startLine}-L{citation.endLine}
         </span>
       </div>
-      <p className="max-h-16 overflow-hidden text-xs leading-5 text-slate-400">{citation.snippet}</p>
+      <p className="max-h-16 overflow-hidden text-xs leading-5 text-[#7d7d87]">{citation.snippet}</p>
       {citation.sourceUrl ? (
-        <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-300 group-hover:text-blue-200">
+        <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[#F04D26] group-hover:text-[#ff6e4a]">
           View source <ExternalLink className="h-3.5 w-3.5" />
         </span>
       ) : null}
     </Wrapper>
+  );
+}
+
+function IngestDashboard() {
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [githubUrl, setGithubUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  const handleZipUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!zipFile) return;
+    setLoading(true); setError(null);
+    const formData = new FormData();
+    formData.append("file", zipFile);
+    try {
+      const res = await fetch("/api/ingest/zip", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to upload ZIP");
+      router.push(`/ask?sourceId=${data.sourceId}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally { setLoading(false); }
+  };
+
+  const handleGithubIngest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!githubUrl.trim()) return;
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch("/api/ingest/github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: githubUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to ingest GitHub repo");
+      router.push(`/ask?sourceId=${data.sourceId}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Ingest failed");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#151515]">
+      <div className="mx-auto w-[90%] max-w-[860px] py-16">
+        <div className="mb-10 text-center">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F04D26]/40 bg-[#F04D26]/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-[#F04D26]">
+            Index a Codebase
+          </span>
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+            Start by importing your repository
+          </h1>
+          <p className="mt-3 text-base text-[#7d7d87]">
+            Upload a ZIP archive or paste a public GitHub URL to get started.
+          </p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* ZIP upload */}
+          <div className="rounded-[28px] bg-[#1a1a1a] p-[5px]">
+            <div className="rounded-[25px] border border-white/[0.07] p-[2px]">
+              <div className="rounded-[22px] border border-white/[0.04] bg-[#111111] p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="rounded-xl border border-[#F04D26]/30 bg-[#F04D26]/10 p-2.5">
+                    <Upload className="h-5 w-5 text-[#F04D26]" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Upload ZIP</h3>
+                    <p className="text-xs text-[#7d7d87]">Max 25 MB</p>
+                  </div>
+                </div>
+                <form onSubmit={handleZipUpload} className="space-y-4">
+                  <label htmlFor="zip-input" className="block text-sm font-medium text-white/70">ZIP archive</label>
+                  <input
+                    id="zip-input" type="file" accept=".zip"
+                    onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
+                    className="block w-full rounded-xl border border-white/10 bg-[#0e0e0e] px-3 py-3 text-sm text-white/80 file:mr-4 file:rounded-lg file:border-0 file:bg-[#F04D26] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#de4723] focus:border-[#F04D26]/50 focus:outline-none"
+                  />
+                  <button
+                    type="submit" disabled={loading || !zipFile}
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] text-sm font-semibold text-white transition-colors hover:bg-[#de4723] disabled:cursor-not-allowed disabled:bg-[#F04D26]/25 disabled:text-white/40"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    Ingest ZIP
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          {/* GitHub ingest */}
+          <div className="rounded-[28px] bg-[#1a1a1a] p-[5px]">
+            <div className="rounded-[25px] border border-white/[0.07] p-[2px]">
+              <div className="rounded-[22px] border border-white/[0.04] bg-[#111111] p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="rounded-xl border border-white/15 bg-white/5 p-2.5">
+                    <Github className="h-5 w-5 text-white/80" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">GitHub Repo</h3>
+                    <p className="text-xs text-[#7d7d87]">Public repos · Max 1 000 files</p>
+                  </div>
+                </div>
+                <form onSubmit={handleGithubIngest} className="space-y-4">
+                  <label htmlFor="github-url" className="block text-sm font-medium text-white/70">Repository URL</label>
+                  <input
+                    id="github-url" type="url"
+                    placeholder="https://github.com/owner/repo"
+                    value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)}
+                    className="h-12 w-full rounded-xl border border-white/10 bg-[#0e0e0e] px-4 text-sm text-white/90 placeholder:text-white/30 focus:border-[#F04D26]/50 focus:outline-none focus:ring-2 focus:ring-[#F04D26]/15"
+                  />
+                  <button
+                    type="submit" disabled={loading || !githubUrl.trim()}
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] text-sm font-semibold text-white transition-colors hover:border-white/25 hover:bg-white/10 disabled:cursor-not-allowed disabled:border-white/5 disabled:text-white/30"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+                    Ingest Repo
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-6 rounded-xl border border-red-500/40 bg-red-900/15 p-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -168,12 +301,6 @@ function AskContent() {
   const [activeTagId, setActiveTagId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    if (!sourceId) {
-      router.replace("/");
-    }
-  }, [sourceId, router]);
 
   useEffect(() => {
     setQuestion("");
@@ -211,7 +338,7 @@ function AskContent() {
   }, [response, normalizedEvidenceSearch, activeTagId]);
 
   if (!sourceId) {
-    return <div className="flex min-h-screen items-center justify-center text-slate-300">Redirecting...</div>;
+    return <IngestDashboard />;
   }
 
   const handleAsk = async (e: React.FormEvent) => {
@@ -268,14 +395,16 @@ function AskContent() {
   };
 
   return (
+    <div className="min-h-screen bg-[#151515]">
     <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1.8fr)_minmax(340px,1fr)]">
       <main className="space-y-6">
-        <header className="rounded-2xl border border-slate-700/80 bg-slate-900/70 p-5 backdrop-blur-sm">
+        <header className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5">
           <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={() => router.push("/")}
-              aria-label="Back to home"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+              onClick={() => router.push("/ask")}
+              aria-label="Ingest new repository"
+              title="Ingest new repository"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-white/70 transition-colors hover:border-[#F04D26]/50 hover:text-white"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
@@ -285,7 +414,7 @@ function AskContent() {
             </div>
             <button
               onClick={() => router.push(`/history?sourceId=${sourceId}`)}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 text-sm font-medium text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-[#111111] px-4 text-sm font-medium text-white/70 transition-colors hover:border-white/25 hover:text-white"
             >
               <History className="h-4 w-4" />
               History
@@ -293,8 +422,8 @@ function AskContent() {
           </div>
         </header>
 
-        <form onSubmit={handleAsk} className="rounded-2xl border border-slate-700/80 bg-slate-900/70 p-5 shadow-[0_20px_60px_-32px_rgba(37,99,235,0.8)]">
-          <label htmlFor="repo-question" className="block text-sm font-medium text-slate-300">
+        <form onSubmit={handleAsk} className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5 shadow-[0_20px_60px_-32px_rgba(240,77,38,0.25)]">
+          <label htmlFor="repo-question" className="block text-sm font-medium text-white/70">
             Question
           </label>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -306,18 +435,18 @@ function AskContent() {
                 placeholder="Where is auth handled? How do retries work?"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                className="h-14 w-full rounded-xl border border-slate-600 bg-slate-950/80 pl-12 pr-4 text-base text-slate-100 placeholder:text-slate-400 shadow-inner focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="h-14 w-full rounded-xl border border-white/10 bg-[#0e0e0e] pl-12 pr-4 text-base text-white/90 placeholder:text-white/30 focus:border-[#F04D26]/50 focus:outline-none focus:ring-2 focus:ring-[#F04D26]/15"
               />
             </div>
             <button
               type="submit"
               disabled={loading || !question.trim()}
-              className="inline-flex h-14 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-base font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-900/40 disabled:text-slate-300"
+              className="inline-flex h-14 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-[#F04D26] px-6 text-base font-semibold text-white transition-colors hover:bg-[#de4723] disabled:cursor-not-allowed disabled:bg-[#F04D26]/25 disabled:text-white/40"
             >
               {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Ask"}
             </button>
           </div>
-          <p className="mt-3 text-xs text-slate-400">Answers are grounded only in retrieved snippets and include file/line citations.</p>
+          <p className="mt-3 text-xs text-[#7d7d87]">Answers are grounded only in retrieved snippets and include file/line citations.</p>
         </form>
 
         {error ? (
@@ -326,21 +455,21 @@ function AskContent() {
 
         {response ? (
           <div className="space-y-6">
-            <section className="rounded-2xl border border-slate-700/90 bg-slate-900/70 p-6 shadow-xl shadow-slate-950/20">
-              <h2 className="mb-4 border-b border-slate-700 pb-3 text-xl font-semibold text-white">Answer</h2>
+            <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
+              <h2 className="mb-4 border-b border-white/[0.07] pb-3 text-xl font-semibold text-white">Answer</h2>
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {response.answer}
               </ReactMarkdown>
               {response.note_when_insufficient_evidence ? (
-                <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                <div className="mt-4 rounded-lg border border-[#F04D26]/30 bg-[#F04D26]/8 px-3 py-2 text-sm text-[#ff6e4a]">
                   {response.note_when_insufficient_evidence}
                 </div>
               ) : null}
             </section>
 
-            <section className="rounded-2xl border border-slate-700/90 bg-slate-900/70 p-6">
+            <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
               <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-                <ExternalLink className="h-5 w-5 text-blue-300" />
+                <ExternalLink className="h-5 w-5 text-[#F04D26]" />
                 Citations
               </h3>
               {filteredCitations.length > 0 ? (
@@ -356,17 +485,17 @@ function AskContent() {
               )}
             </section>
 
-            <section className="rounded-2xl border border-slate-700/90 bg-slate-900/70 p-6">
+            <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
-                  <Wand2 className="h-5 w-5 text-violet-300" />
+                  <Wand2 className="h-5 w-5 text-[#F04D26]" />
                   Refactor Suggestions
                 </h3>
                 <button
                   type="button"
                   onClick={handleGenerateRefactors}
                   disabled={refactorLoading || response.retrievedSnippets.length === 0}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 text-sm font-medium text-violet-200 transition-colors hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#F04D26]/40 bg-[#F04D26]/8 px-3 text-sm font-medium text-[#F04D26] transition-colors hover:bg-[#F04D26]/15 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[#1a1a1a] disabled:text-white/30"
                 >
                   {refactorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
                   Generate Suggestions
@@ -382,11 +511,11 @@ function AskContent() {
               {refactorResponse?.suggestions?.length ? (
                 <div className="space-y-4">
                   {refactorResponse.suggestions.map((suggestion, index) => (
-                    <article key={`${suggestion.title}-${index}`} className="rounded-xl border border-slate-700 bg-slate-950/50 p-4">
-                      <h4 className="text-base font-semibold text-slate-100">{suggestion.title}</h4>
-                      <p className="mt-2 text-sm text-slate-300">{suggestion.rationale}</p>
-                      <p className="mt-2 text-sm text-slate-400">
-                        <span className="font-semibold text-slate-300">Impact:</span> {suggestion.expectedImpact}
+                    <article key={`${suggestion.title}-${index}`} className="rounded-xl border border-white/[0.07] bg-[#111111] p-4">
+                      <h4 className="text-base font-semibold text-white">{suggestion.title}</h4>
+                      <p className="mt-2 text-sm text-white/75">{suggestion.rationale}</p>
+                      <p className="mt-2 text-sm text-[#7d7d87]">
+                        <span className="font-semibold text-white/70">Impact:</span> {suggestion.expectedImpact}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {suggestion.citations.map((citation, citationIndex) =>
@@ -396,7 +525,7 @@ function AskContent() {
                               href={citation.sourceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-blue-200 hover:border-blue-400"
+                              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-[#F04D26] hover:border-[#F04D26]/50"
                             >
                               {citation.filePath} L{citation.startLine}-L{citation.endLine}
                               <ExternalLink className="h-3 w-3" />
@@ -404,7 +533,7 @@ function AskContent() {
                           ) : (
                             <span
                               key={`${citation.filePath}-${citation.startLine}-${citationIndex}`}
-                              className="inline-flex items-center rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-300"
+                              className="inline-flex items-center rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-white/60"
                             >
                               {citation.filePath} L{citation.startLine}-L{citation.endLine}
                             </span>
@@ -424,21 +553,21 @@ function AskContent() {
             </section>
           </div>
         ) : (
-          <section className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center text-slate-400">
-            Ask a question to see grounded answer, citations, and retrieved snippets.
+          <section className="rounded-2xl border border-dashed border-white/10 bg-[#1a1a1a]/40 p-8 text-center text-[#7d7d87]">
+            Ask a question to see a grounded answer, citations, and retrieved snippets.
           </section>
         )}
       </main>
 
       <aside className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
-        <section className="rounded-2xl border border-slate-700/90 bg-slate-900/70 p-5">
+        <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5">
           <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-            <Code2 className="h-5 w-5 text-blue-300" />
+            <Code2 className="h-5 w-5 text-[#F04D26]" />
             Retrieved Evidence
           </h3>
           {response ? (
             <div className="mb-4">
-              <label htmlFor="evidence-search" className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <label htmlFor="evidence-search" className="block text-xs font-semibold uppercase tracking-wide text-[#7d7d87]">
                 Search Evidence
               </label>
               <input
@@ -447,7 +576,7 @@ function AskContent() {
                 placeholder="Filter by file or snippet text"
                 value={evidenceSearch}
                 onChange={(e) => setEvidenceSearch(e.target.value)}
-                className="mt-2 h-10 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+                className="mt-2 h-10 w-full rounded-lg border border-white/10 bg-[#0e0e0e] px-3 text-sm text-white/90 placeholder:text-white/30 focus:border-[#F04D26]/50 focus:outline-none focus:ring-2 focus:ring-[#F04D26]/15"
               />
               {evidenceTags.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -460,12 +589,12 @@ function AskContent() {
                         onClick={() => setActiveTagId(isActive ? "" : tag.id)}
                         className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                           isActive
-                            ? "border-blue-400 bg-blue-500/20 text-blue-200"
-                            : "border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500"
+                            ? "border-[#F04D26]/60 bg-[#F04D26]/15 text-[#F04D26]"
+                            : "border-white/10 bg-[#111111] text-white/60 hover:border-white/20"
                         }`}
                       >
                         {tag.label}
-                        <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px]">
+                        <span className="rounded-full bg-[#1a1a1a] px-1.5 py-0.5 text-[10px]">
                           {tag.count}
                         </span>
                       </button>
@@ -473,7 +602,7 @@ function AskContent() {
                   })}
                 </div>
               ) : null}
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-[#7d7d87]">
                 Showing {filteredSnippets.length} of {response.retrievedSnippets.length} snippets.
               </p>
             </div>
@@ -481,14 +610,14 @@ function AskContent() {
           {filteredSnippets.length ? (
             <div className="space-y-4">
               {filteredSnippets.map((snippet, index) => (
-                <article key={`${snippet.filePath}-${snippet.startLine}-${index}`} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950/60">
-                  <header className="flex items-center justify-between gap-2 border-b border-slate-700 bg-slate-900 px-3 py-2">
-                    <span className="truncate font-mono text-xs font-semibold text-slate-200">{snippet.filePath}</span>
-                    <span className="shrink-0 rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300">
+                <article key={`${snippet.filePath}-${snippet.startLine}-${index}`} className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#111111]">
+                  <header className="flex items-center justify-between gap-2 border-b border-white/[0.06] bg-[#0e0e0e] px-3 py-2">
+                    <span className="truncate font-mono text-xs font-semibold text-white/85">{snippet.filePath}</span>
+                    <span className="shrink-0 rounded bg-[#1a1a1a] px-2 py-1 text-[11px] text-white/55">
                       L{snippet.startLine}-L{snippet.endLine}
                     </span>
                   </header>
-                  <pre className="max-h-64 overflow-auto p-3 text-xs leading-5 text-slate-200">
+                  <pre className="max-h-64 overflow-auto p-3 text-xs leading-5 text-white/75">
                     <code>{snippet.snippet}</code>
                   </pre>
                   {snippet.sourceUrl ? (
@@ -496,7 +625,7 @@ function AskContent() {
                       href={snippet.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 border-t border-slate-700 px-3 py-2 text-xs font-medium text-blue-300 transition-colors hover:text-blue-200"
+                      className="inline-flex items-center gap-1 border-t border-white/[0.06] px-3 py-2 text-xs font-medium text-[#F04D26] transition-colors hover:text-[#ff6e4a]"
                     >
                       Open source <ExternalLink className="h-3.5 w-3.5" />
                     </a>
@@ -505,16 +634,17 @@ function AskContent() {
               ))}
             </div>
           ) : response ? (
-            <p className="rounded-lg border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+            <p className="rounded-lg border border-dashed border-white/10 bg-[#111111] p-4 text-sm text-[#7d7d87]">
               No snippets match the current search.
             </p>
           ) : (
-            <p className="rounded-lg border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+            <p className="rounded-lg border border-dashed border-white/10 bg-[#111111] p-4 text-sm text-[#7d7d87]">
               Retrieved snippets will appear here after you submit a question.
             </p>
           )}
         </section>
       </aside>
+    </div>
     </div>
   );
 }
@@ -523,8 +653,8 @@ export default function AskPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+        <div className="flex min-h-screen items-center justify-center bg-[#151515]">
+          <Loader2 className="h-8 w-8 animate-spin text-[#F04D26]" />
         </div>
       }
     >
