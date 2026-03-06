@@ -1,4 +1,4 @@
-# Repo Lens - Option B
+# Repo Lens
 
 Repo Lens is a codebase Q&A web application that provides verifiable, citation-backed answers to your questions about a codebase. It supports both ZIP uploads and public GitHub repository ingestion.
 
