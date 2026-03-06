@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { ingestZip } from "@/lib/ingestion/zip";
 import { supabase } from "@/lib/db";
 import { config } from "@/lib/config";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: NextRequest) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let sourceId: string | null = null;
 
   try {
