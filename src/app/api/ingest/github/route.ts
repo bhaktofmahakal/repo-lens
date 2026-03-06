@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { ingestGitHub } from "@/lib/ingestion/github";
 import { supabase } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
@@ -10,6 +11,11 @@ const githubUrlSchema = z
   .regex(/^https:\/\/github\.com\/[^\/]+\/[^\/]+(?:\.git)?\/?$/);
 
 export async function POST(req: NextRequest) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let sourceId: string | null = null;
 
   try {
