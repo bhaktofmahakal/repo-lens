@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { supabase } from "@/lib/db";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(req: NextRequest) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const sourceId = searchParams.get("sourceId");
 
     if (!sourceId) {
       return NextResponse.json({ error: "Source ID is required." }, { status: 400 });
+    }
+    if (!UUID_RE.test(sourceId)) {
+      return NextResponse.json({ error: "Invalid Source ID." }, { status: 400 });
     }
 
     const { data, error } = await supabase
