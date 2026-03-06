@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "fynt-landing-design": {
+      "source": "bhaktofmahakal/agent-skills",
+      "sourceType": "github",
+      "computedHash": "b37a83997c79b9397e4bbf90770fc8306240ca163f11ddd85e35939e8ae94073"
+    }
+  }
+}
