@@ -28,11 +28,13 @@ function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? searchParams.get("next") ?? "/ask";
+  const registered = searchParams.get("registered") === "1";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info] = useState<string | null>(registered ? "Account created! Please sign in." : null);
   const reduce = useReducedMotion();
 
   async function handleSignIn(e: React.FormEvent) {
@@ -154,6 +156,12 @@ function SignInForm() {
                 {error && (
                   <div className="mb-5 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-4 py-3 text-sm text-red-400">
                     {error}
+                  </div>
+                )}
+
+                {!error && info && (
+                  <div className="mb-5 rounded-xl border border-green-500/20 bg-green-500/[0.08] px-4 py-3 text-sm text-green-400">
+                    {info}
                   </div>
                 )}
 

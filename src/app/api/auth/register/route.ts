@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
     if (error.code === "23505") {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
+    console.error("[register] Supabase insert error:", error.code, error.message, error.details);
     return NextResponse.json({ error: "Registration failed. Please try again." }, { status: 500 });
   }
 

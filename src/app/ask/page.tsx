@@ -4,7 +4,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Code2, ExternalLink, Github, History, Loader2, Search, Upload, Wand2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Code2, ExternalLink, Github, History, Loader2, LogOut, Search, Upload, Wand2 } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { AskResponse, Citation, RefactorResponse } from "@/types";
 
 type EvidenceTag = {
@@ -196,21 +197,21 @@ function IngestDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#151515]">
-      <div className="mx-auto w-[90%] max-w-[860px] py-16">
-        <div className="mb-10 text-center">
+    <div className="min-h-screen overflow-x-hidden bg-[#151515]">
+      <div className="mx-auto w-full max-w-[860px] px-4 py-10 sm:px-6 sm:py-16">
+        <div className="mb-8 text-center sm:mb-10">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F04D26]/40 bg-[#F04D26]/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-[#F04D26]">
             Index a Codebase
           </span>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
             Start by importing your repository
           </h1>
-          <p className="mt-3 text-base text-[#7d7d87]">
+          <p className="mt-3 text-sm text-[#7d7d87] sm:text-base">
             Upload a ZIP archive or paste a public GitHub URL to get started.
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-2">
           {/* ZIP upload */}
           <div className="rounded-[28px] bg-[#1a1a1a] p-[5px]">
             <div className="rounded-[25px] border border-white/[0.07] p-[2px]">
@@ -300,6 +301,8 @@ function AskContent() {
   const [evidenceSearch, setEvidenceSearch] = useState("");
   const [activeTagId, setActiveTagId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [evidenceExpanded, setEvidenceExpanded] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -394,30 +397,47 @@ function AskContent() {
     }
   };
 
+  const handleLogout = async () => {
+    setLogoutLoading(true);
+    try {
+      await signOut({ callbackUrl: "/" });
+    } finally {
+      setLogoutLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#151515]">
-    <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1.8fr)_minmax(340px,1fr)]">
-      <main className="space-y-6">
-        <header className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5">
-          <div className="flex flex-wrap items-center gap-3">
+    <div className="min-h-screen overflow-x-hidden bg-[#151515]">
+    <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1.8fr)_minmax(320px,1fr)]">
+      <main className="min-w-0 space-y-6">
+        <header className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-4 sm:p-5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={() => router.push("/ask")}
               aria-label="Ingest new repository"
               title="Ingest new repository"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-white/70 transition-colors hover:border-[#F04D26]/50 hover:text-white"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-white/70 transition-colors hover:border-[#F04D26]/50 hover:text-white sm:h-10 sm:w-10"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
             <div className="min-w-0 flex-1">
-              <h1 className="text-3xl font-semibold tracking-tight text-white">Ask Repo Lens</h1>
-              <p className="mt-1 text-sm text-slate-400">Ask natural-language questions and verify every answer with source evidence.</p>
+              <h1 className="text-lg font-semibold tracking-tight text-white sm:text-2xl lg:text-3xl">Ask Repo Lens</h1>
+              <p className="mt-0.5 text-xs text-slate-400 sm:mt-1 sm:text-sm">Ask natural-language questions and verify every answer with source evidence.</p>
             </div>
             <button
               onClick={() => router.push(`/history?sourceId=${sourceId}`)}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-[#111111] px-4 text-sm font-medium text-white/70 transition-colors hover:border-white/25 hover:text-white"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-[#111111] px-3 text-sm font-medium text-white/70 transition-colors hover:border-white/25 hover:text-white sm:h-10 sm:px-4"
             >
               <History className="h-4 w-4" />
-              History
+              <span className="hidden sm:inline">History</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={logoutLoading}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 px-3 text-sm font-medium text-red-300 transition-colors hover:border-red-500/45 hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:px-4"
+            >
+              {logoutLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </header>
@@ -525,17 +545,21 @@ function AskContent() {
                               href={citation.sourceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-[#F04D26] hover:border-[#F04D26]/50"
+                              className="inline-flex max-w-[220px] items-center gap-1 rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-[#F04D26] hover:border-[#F04D26]/50"
+                              title={`${citation.filePath} L${citation.startLine}-L${citation.endLine}`}
                             >
-                              {citation.filePath} L{citation.startLine}-L{citation.endLine}
-                              <ExternalLink className="h-3 w-3" />
+                              <span className="truncate">{citation.filePath}</span>
+                              <span className="shrink-0"> L{citation.startLine}-L{citation.endLine}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0" />
                             </a>
                           ) : (
                             <span
                               key={`${citation.filePath}-${citation.startLine}-${citationIndex}`}
-                              className="inline-flex items-center rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-white/60"
+                              className="inline-flex max-w-[220px] items-center rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-white/60"
+                              title={`${citation.filePath} L${citation.startLine}-L${citation.endLine}`}
                             >
-                              {citation.filePath} L{citation.startLine}-L{citation.endLine}
+                              <span className="truncate">{citation.filePath}</span>
+                              <span className="shrink-0"> L{citation.startLine}-L{citation.endLine}</span>
                             </span>
                           ),
                         )}
@@ -559,7 +583,27 @@ function AskContent() {
         )}
       </main>
 
-      <aside className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+      <aside className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+        {/* Mobile/tablet collapsible toggle */}
+        <button
+          type="button"
+          onClick={() => setEvidenceExpanded((v) => !v)}
+          className="mb-3 flex w-full items-center justify-between rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-4 lg:hidden"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Code2 className="h-4 w-4 text-[#F04D26]" />
+            Retrieved Evidence
+            {response ? (
+              <span className="rounded-full bg-[#F04D26]/20 px-1.5 py-0.5 text-xs font-medium text-[#F04D26]">
+                {filteredSnippets.length}
+              </span>
+            ) : null}
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 text-white/50 transition-transform duration-200 ${evidenceExpanded ? "rotate-180" : ""}`}
+          />
+        </button>
+        <div className={`${evidenceExpanded ? "block" : "hidden"} lg:block`}>
         <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5">
           <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
             <Code2 className="h-5 w-5 text-[#F04D26]" />
@@ -643,6 +687,7 @@ function AskContent() {
             </p>
           )}
         </section>
+        </div>
       </aside>
     </div>
     </div>

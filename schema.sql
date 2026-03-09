@@ -29,11 +29,18 @@ CREATE TABLE IF NOT EXISTS chunks (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Resets existing vectors after dimension changes.
-DROP INDEX IF EXISTS chunks_embedding_idx;
-ALTER TABLE chunks
-  ALTER COLUMN embedding TYPE VECTOR(768)
-  USING NULL;
+-- Resets existing vectors after dimension changes (only runs if column exists with different type).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'chunks' AND column_name = 'embedding'
+  ) THEN
+    DROP INDEX IF EXISTS chunks_embedding_idx;
+    ALTER TABLE chunks ALTER COLUMN embedding TYPE VECTOR(768) USING NULL;
+  END IF;
+END;
+$$;
 
 CREATE TABLE IF NOT EXISTS qa_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -55,16 +55,23 @@ function SignUpForm() {
     }
 
     // Auto sign-in after successful registration
-    const result = await signIn("credentials", {
-      redirect: false,
-      email: email.toLowerCase().trim(),
-      password,
-    });
-
-    if (result?.error) {
-      setError("Account created! Please sign in.");
+    let result;
+    try {
+      result = await signIn("credentials", {
+        redirect: false,
+        email: email.toLowerCase().trim(),
+        password,
+      });
+    } catch {
+      // signIn threw (e.g. NEXTAUTH_SECRET misconfigured in production)
       setLoading(false);
-      router.push("/sign-in");
+      router.push("/sign-in?registered=1");
+      return;
+    }
+
+    if (!result || result.error) {
+      setLoading(false);
+      router.push("/sign-in?registered=1");
     } else {
       router.push(callbackUrl);
       router.refresh();
