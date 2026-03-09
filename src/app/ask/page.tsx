@@ -137,15 +137,20 @@ function CitationCard({ citation }: { citation: Citation }) {
       {...(citation.sourceUrl
         ? { href: citation.sourceUrl, target: "_blank", rel: "noopener noreferrer" }
         : {})}
-      className="group block rounded-xl border border-white/[0.07] bg-[#1a1a1a] p-4 transition-colors hover:border-[#F04D26]/40"
+      className="group block min-w-0 overflow-hidden rounded-xl border border-white/[0.07] bg-[#1a1a1a] p-4 transition-colors hover:border-[#F04D26]/40"
     >
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <span className="truncate font-mono text-xs font-semibold text-white/85">{citation.filePath}</span>
+      <div className="mb-2 flex min-w-0 items-start justify-between gap-2">
+        <span
+          className="min-w-0 break-all font-mono text-xs font-semibold text-white/85"
+          title={citation.filePath}
+        >
+          {citation.filePath}
+        </span>
         <span className="shrink-0 rounded bg-[#0e0e0e] px-2 py-1 text-[11px] font-medium text-white/60">
-          L{citation.startLine}-L{citation.endLine}
+          L{citation.startLine}–L{citation.endLine}
         </span>
       </div>
-      <p className="max-h-16 overflow-hidden text-xs leading-5 text-[#7d7d87]">{citation.snippet}</p>
+      <p className="max-h-20 overflow-hidden break-words text-xs leading-5 text-[#7d7d87]">{citation.snippet}</p>
       {citation.sourceUrl ? (
         <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[#F04D26] group-hover:text-[#ff6e4a]">
           View source <ExternalLink className="h-3.5 w-3.5" />
@@ -477,14 +482,37 @@ function AskContent() {
           <div className="space-y-6">
             <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
               <h2 className="mb-4 border-b border-white/[0.07] pb-3 text-xl font-semibold text-white">Answer</h2>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {response.answer}
-              </ReactMarkdown>
-              {response.note_when_insufficient_evidence ? (
-                <div className="mt-4 rounded-lg border border-[#F04D26]/30 bg-[#F04D26]/8 px-3 py-2 text-sm text-[#ff6e4a]">
-                  {response.note_when_insufficient_evidence}
+              {response.note_when_insufficient_evidence && !response.answer.trim() ? (
+                /* Insufficient evidence — render evidence as linked cards */
+                <div>
+                  <div className="mb-4 rounded-lg border border-[#F04D26]/30 bg-[#F04D26]/8 px-3 py-2.5 text-sm text-[#ff6e4a]">
+                    {response.note_when_insufficient_evidence}
+                  </div>
+                  {response.retrievedSnippets.length > 0 && (
+                    <div className="mt-4 space-y-1">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#7d7d87]">Retrieved evidence</p>
+                      <div className="grid gap-3">
+                        {response.retrievedSnippets.map((s, i) => (
+                          <CitationCard key={`ev-${s.filePath}-${s.startLine}-${i}`} citation={s} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div className="min-w-0 overflow-x-auto">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                      {response.answer}
+                    </ReactMarkdown>
+                  </div>
+                  {response.note_when_insufficient_evidence ? (
+                    <div className="mt-4 rounded-lg border border-[#F04D26]/30 bg-[#F04D26]/8 px-3 py-2 text-sm text-[#ff6e4a]">
+                      {response.note_when_insufficient_evidence}
+                    </div>
+                  ) : null}
+                </>
+              )}
             </section>
 
             <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
@@ -493,7 +521,7 @@ function AskContent() {
                 Citations
               </h3>
               {filteredCitations.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   {filteredCitations.map((citation, index) => (
                     <CitationCard key={`${citation.filePath}-${citation.startLine}-${index}`} citation={citation} />
                   ))}
