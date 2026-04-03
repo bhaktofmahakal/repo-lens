@@ -13,6 +13,7 @@ import { embedTexts } from "@/lib/embeddings/hf";
 import { IngestResult } from "@/types";
 
 const CHUNK_INSERT_BATCH_SIZE = 250;
+const GITHUB_INGEST_TIME_BUDGET_MS = 45_000;
 
 async function fetchTextWithTimeout(url: string, timeoutMs: number): Promise<string | null> {
   const controller = new AbortController();
@@ -41,6 +42,7 @@ function createOctokitClient(): Octokit {
 }
 
 export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<IngestResult> {
+  const startedAt = Date.now();
   const octokit = createOctokitClient();
   const urlParts = repoUrl.replace('https://github.com/', '').split('/');
   if (urlParts.length < 2) throw new Error("Invalid GitHub URL");
@@ -78,9 +80,19 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
 
   let limitReached = false;
   for (let i = 0; i < blobEntries.length && !limitReached; i += config.githubFetchConcurrency) {
+    if (Date.now() - startedAt > GITHUB_INGEST_TIME_BUDGET_MS) {
+      console.warn("GitHub ingest time budget reached. Returning partial ingest result.");
+      limitReached = true;
+      break;
+    }
+
     const batch = blobEntries.slice(i, i + config.githubFetchConcurrency);
     const batchResults = await Promise.allSettled(
       batch.map(async (entry) => {
+        if (Date.now() - startedAt > GITHUB_INGEST_TIME_BUDGET_MS) {
+          return null;
+        }
+
         const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${entry.path}`;
         const rawContent = await fetchTextWithTimeout(rawUrl, 15000);
         if (!rawContent) return null;

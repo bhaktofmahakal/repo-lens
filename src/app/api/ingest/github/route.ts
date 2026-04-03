@@ -13,6 +13,7 @@ const githubUrlSchema = z
   .regex(/^https:\/\/github\.com\/[^\/]+\/[^\/]+(?:\.git)?\/?$/);
 
 export async function POST(req: NextRequest) {
+  const requestId = crypto.randomUUID();
   const auth = await requireRequestAuth(req);
   if ("response" in auth) {
     return auth.response;
@@ -45,13 +46,16 @@ export async function POST(req: NextRequest) {
       github_url: validatedUrl,
     });
 
-    if (sourceError) throw sourceError;
+    if (sourceError) {
+      console.error(`[${requestId}] Failed inserting source row:`, sourceError);
+      throw sourceError;
+    }
 
     const result = await ingestGitHub(validatedUrl, sourceId);
 
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error("Ingest GitHub Error:", error);
+    console.error(`[${requestId}] Ingest GitHub Error:`, error);
     if (sourceId) {
       const { error: rollbackError } = await supabase.from("sources").delete().eq("id", sourceId);
       if (rollbackError) {
@@ -88,6 +92,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ error: error.message || "Failed to ingest GitHub repo" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: error.message || "Failed to ingest GitHub repo",
+        requestId,
+      },
+      { status: 500 },
+    );
   }
 }
