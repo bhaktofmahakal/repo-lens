@@ -14,6 +14,22 @@ import { IngestResult } from "@/types";
 
 const CHUNK_INSERT_BATCH_SIZE = 250;
 
+async function fetchTextWithTimeout(url: string, timeoutMs: number): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch (error) {
+    console.error("GitHub raw fetch failed:", url, error);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function createOctokitClient(): Octokit {
   const token = process.env.GITHUB_TOKEN;
   if (isConfiguredEnvValue(token)) {
@@ -36,12 +52,19 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
   }
 
   const defaultBranch = repoMeta.default_branch || "main";
-  const { data: branch } = await octokit.repos.getBranch({ owner, repo, branch: defaultBranch });
+
+  let treeSha = defaultBranch;
+  try {
+    const { data: branch } = await octokit.repos.getBranch({ owner, repo, branch: defaultBranch });
+    treeSha = branch.commit.sha;
+  } catch (error) {
+    console.error("Failed to resolve default branch SHA, falling back to branch name:", error);
+  }
 
   const { data: tree } = await octokit.git.getTree({
     owner,
     repo,
-    tree_sha: branch.commit.sha,
+    tree_sha: treeSha,
     recursive: '1',
   });
 
@@ -56,13 +79,11 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
   let limitReached = false;
   for (let i = 0; i < blobEntries.length && !limitReached; i += config.githubFetchConcurrency) {
     const batch = blobEntries.slice(i, i + config.githubFetchConcurrency);
-    const batchResults = await Promise.all(
+    const batchResults = await Promise.allSettled(
       batch.map(async (entry) => {
         const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${entry.path}`;
-        const response = await fetch(rawUrl);
-        if (!response.ok) return null;
-
-        const rawContent = await response.text();
+        const rawContent = await fetchTextWithTimeout(rawUrl, 15000);
+        if (!rawContent) return null;
         if (isProbablyBinaryContent(rawContent)) return null;
 
         const content = sanitizeForDatabase(rawContent);
@@ -81,7 +102,13 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
       }),
     );
 
-    for (const result of batchResults) {
+    for (const settled of batchResults) {
+      if (settled.status !== "fulfilled") {
+        console.error("GitHub file batch worker failed:", settled.reason);
+        continue;
+      }
+
+      const result = settled.value;
       if (!result) continue;
 
       if (totalFiles + result.fileCount > config.maxTotalFiles || totalChars + result.charCount > config.maxTotalChars) {

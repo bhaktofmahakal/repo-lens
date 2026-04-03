@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { requireRequestAuth } from "@/lib/auth-guard";
 
+export const maxDuration = 60;
+
 const githubUrlSchema = z
   .string()
   .trim()
