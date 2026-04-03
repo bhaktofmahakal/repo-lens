@@ -12,6 +12,8 @@ import { chunkFile } from "./chunker";
 import { embedTexts } from "@/lib/embeddings/hf";
 import { IngestResult } from "@/types";
 
+const CHUNK_INSERT_BATCH_SIZE = 250;
+
 function createOctokitClient(): Octokit {
   const token = process.env.GITHUB_TOKEN;
   if (isConfiguredEnvValue(token)) {
@@ -33,10 +35,13 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
     throw new Error("Private repositories are not supported.");
   }
 
+  const defaultBranch = repoMeta.default_branch || "main";
+  const { data: branch } = await octokit.repos.getBranch({ owner, repo, branch: defaultBranch });
+
   const { data: tree } = await octokit.git.getTree({
     owner,
     repo,
-    tree_sha: repoMeta.default_branch || "HEAD",
+    tree_sha: branch.commit.sha,
     recursive: '1',
   });
 
@@ -53,7 +58,7 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
     const batch = blobEntries.slice(i, i + config.githubFetchConcurrency);
     const batchResults = await Promise.all(
       batch.map(async (entry) => {
-        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${entry.path}`;
+        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${entry.path}`;
         const response = await fetch(rawUrl);
         if (!response.ok) return null;
 
@@ -64,7 +69,7 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
         if (!content.trim()) return null;
 
         const sourcePath = sanitizeForDatabase(entry.path!);
-        const sourceUrl = sanitizeForDatabase(`https://github.com/${owner}/${repo}/blob/HEAD/${entry.path}`);
+        const sourceUrl = sanitizeForDatabase(`https://github.com/${owner}/${repo}/blob/${defaultBranch}/${entry.path}`);
         const fileChunks = chunkFile(sourcePath, content, sourceUrl).map((chunk) => ({ ...chunk, source_id: sourceId }));
         if (fileChunks.length === 0) return null;
 
@@ -112,8 +117,13 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
       embedding: embeddings ? embeddings[i] : null,
     }));
 
-    const { error } = await supabase.from('chunks').insert(chunksWithEmbeddings);
-    if (error) throw error;
+    for (let i = 0; i < chunksWithEmbeddings.length; i += CHUNK_INSERT_BATCH_SIZE) {
+      const batch = chunksWithEmbeddings.slice(i, i + CHUNK_INSERT_BATCH_SIZE);
+      const { error } = await supabase.from('chunks').insert(batch);
+      if (error) {
+        throw new Error(`Failed to persist GitHub chunks batch ${Math.floor(i / CHUNK_INSERT_BATCH_SIZE) + 1}: ${error.message}`);
+      }
+    }
   }
 
   return {

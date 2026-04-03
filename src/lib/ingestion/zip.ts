@@ -12,6 +12,8 @@ import { chunkFile } from "./chunker";
 import { embedTexts } from "@/lib/embeddings/hf";
 import { IngestResult } from "@/types";
 
+const CHUNK_INSERT_BATCH_SIZE = 250;
+
 export async function ingestZip(buffer: Buffer, sourceId: string): Promise<IngestResult> {
   const zip = new AdmZip(buffer);
   const zipEntries = zip.getEntries();
@@ -66,8 +68,13 @@ export async function ingestZip(buffer: Buffer, sourceId: string): Promise<Inges
       embedding: embeddings ? embeddings[i] : null,
     }));
 
-    const { error } = await supabase.from('chunks').insert(chunksWithEmbeddings);
-    if (error) throw error;
+    for (let i = 0; i < chunksWithEmbeddings.length; i += CHUNK_INSERT_BATCH_SIZE) {
+      const batch = chunksWithEmbeddings.slice(i, i + CHUNK_INSERT_BATCH_SIZE);
+      const { error } = await supabase.from('chunks').insert(batch);
+      if (error) {
+        throw new Error(`Failed to persist ZIP chunks batch ${Math.floor(i / CHUNK_INSERT_BATCH_SIZE) + 1}: ${error.message}`);
+      }
+    }
   }
 
   return {
