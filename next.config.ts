@@ -16,9 +16,10 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       // unsafe-eval only in dev (webpack HMR); stripped from production
-      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+      `script-src 'self' 'unsafe-inline' https://vercel.live${isDev ? " 'unsafe-eval'" : ""}`,
       "img-src 'self' data: blob:",
-      "connect-src 'self'",
+      "connect-src 'self' https://vercel.live",
+      "frame-src 'self' https://vercel.live",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

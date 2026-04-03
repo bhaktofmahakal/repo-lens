@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Repo Lens icon">
+  <rect width="64" height="64" rx="14" fill="#151515"/>
+  <circle cx="29" cy="29" r="13" fill="none" stroke="#F04D26" stroke-width="5"/>
+  <line x1="38" y1="38" x2="50" y2="50" stroke="#F04D26" stroke-width="6" stroke-linecap="round"/>
+</svg>

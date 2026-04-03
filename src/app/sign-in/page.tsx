@@ -29,11 +29,14 @@ function SignInForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? searchParams.get("next") ?? "/ask";
   const registered = searchParams.get("registered") === "1";
+  const authConfigError = searchParams.get("error") === "auth_config";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    authConfigError ? "Authentication is not configured on the server. Set NEXTAUTH_SECRET and redeploy." : null,
+  );
   const [info] = useState<string | null>(registered ? "Account created! Please sign in." : null);
   const reduce = useReducedMotion();
 
@@ -41,13 +44,25 @@ function SignInForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const result = await signIn("credentials", {
-      redirect: false,
-      email: email.toLowerCase().trim(),
-      password,
-    });
+    let result;
+    try {
+      result = await signIn("credentials", {
+        redirect: false,
+        email: email.toLowerCase().trim(),
+        password,
+      });
+    } catch {
+      setError("Authentication is not configured on the server. Set NEXTAUTH_SECRET and redeploy.");
+      setLoading(false);
+      return;
+    }
+
     if (result?.error) {
-      setError("Invalid email or password. Please try again.");
+      if (result.error.toLowerCase().includes("configuration")) {
+        setError("Authentication is not configured on the server. Set NEXTAUTH_SECRET and redeploy.");
+      } else {
+        setError("Invalid email or password. Please try again.");
+      }
       setLoading(false);
     } else {
       router.push(callbackUrl);

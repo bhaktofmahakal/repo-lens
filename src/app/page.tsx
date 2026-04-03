@@ -1,8 +1,6 @@
 ﻿"use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Github, Search, Zap } from "lucide-react";
@@ -124,16 +122,7 @@ function TechStackStrip() {
 
 export default function Home() {
   const reduce = useReducedMotion();
-  const router = useRouter();
-  const { status } = useSession();
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.replace("/ask");
-    }
-  }, [status, router]);
-
-  if (status === "authenticated") return null;
+  useSession();
 
   return (
     <main className="relative bg-[#151515] text-white">

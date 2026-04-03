@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { embedSingle } from "@/lib/embeddings/hf";
 import { hybridSearch } from "@/lib/retrieval/search";
 import { buildPrompt } from "@/lib/qa/prompt";
 import { generateAnswer } from "@/lib/qa/groq";
 import { extractCitations, formatRetrievedSnippets } from "@/lib/qa/citations";
-import { supabase } from "@/lib/db";
+import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { AskResponse } from "@/types";
+import { requireRequestAuth } from "@/lib/auth-guard";
 
 const INSUFFICIENT_EVIDENCE_PREFIX = "insufficient evidence in the indexed codebase";
 const QUESTION_STOPWORDS = new Set([
@@ -129,9 +129,16 @@ function buildEvidenceBackedFallbackAnswer(
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRequestAuth(req);
+  if ("response" in auth) {
+    return auth.response;
+  }
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { status: 503 },
+    );
   }
 
   try {

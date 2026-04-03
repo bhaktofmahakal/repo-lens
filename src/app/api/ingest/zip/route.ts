@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { ingestZip } from "@/lib/ingestion/zip";
-import { supabase } from "@/lib/db";
+import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { config } from "@/lib/config";
 import { v4 as uuidv4 } from "uuid";
+import { requireRequestAuth } from "@/lib/auth-guard";
 
 export async function POST(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRequestAuth(req);
+  if ("response" in auth) {
+    return auth.response;
+  }
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { status: 503 },
+    );
   }
 
   let sourceId: string | null = null;

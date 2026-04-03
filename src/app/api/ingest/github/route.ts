@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { ingestGitHub } from "@/lib/ingestion/github";
-import { supabase } from "@/lib/db";
+import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { requireRequestAuth } from "@/lib/auth-guard";
 
 const githubUrlSchema = z
   .string()
@@ -11,9 +11,16 @@ const githubUrlSchema = z
   .regex(/^https:\/\/github\.com\/[^\/]+\/[^\/]+(?:\.git)?\/?$/);
 
 export async function POST(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRequestAuth(req);
+  if ("response" in auth) {
+    return auth.response;
+  }
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { status: 503 },
+    );
   }
 
   let sourceId: string | null = null;
@@ -59,6 +66,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Repository not found or inaccessible. Only public GitHub repositories are supported." },
         { status: 400 },
+      );
+    }
+    if (githubStatus === 401) {
+      return NextResponse.json(
+        {
+          error:
+            "GitHub API authentication failed. Remove invalid GITHUB_TOKEN or set a valid token in environment variables.",
+        },
+        { status: 400 },
+      );
+    }
+    if (githubStatus === 429) {
+      return NextResponse.json(
+        {
+          error: "GitHub API rate limit reached. Retry later or configure a valid GITHUB_TOKEN.",
+        },
+        { status: 429 },
       );
     }
 

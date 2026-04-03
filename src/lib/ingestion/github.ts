@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { supabase } from "@/lib/db";
-import { config } from "@/lib/config";
+import { config, isConfiguredEnvValue } from "@/lib/config";
 import {
   isBinaryFile,
   isIgnoredPath,
@@ -12,11 +12,18 @@ import { chunkFile } from "./chunker";
 import { embedTexts } from "@/lib/embeddings/hf";
 import { IngestResult } from "@/types";
 
-const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN,
-});
+function createOctokitClient(): Octokit {
+  const token = process.env.GITHUB_TOKEN;
+  if (isConfiguredEnvValue(token)) {
+    return new Octokit({ auth: token });
+  }
+
+  // Unauthenticated access supports public repositories and avoids failures from placeholder tokens.
+  return new Octokit();
+}
 
 export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<IngestResult> {
+  const octokit = createOctokitClient();
   const urlParts = repoUrl.replace('https://github.com/', '').split('/');
   if (urlParts.length < 2) throw new Error("Invalid GitHub URL");
   const [owner, repo] = urlParts;

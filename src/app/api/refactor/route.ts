@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { embedSingle } from "@/lib/embeddings/hf";
 import { hybridSearch } from "@/lib/retrieval/search";
 import { generateAnswer } from "@/lib/qa/groq";
@@ -10,13 +9,22 @@ import {
   parseRefactorSuggestions,
 } from "@/lib/qa/refactor";
 import { RefactorResponse, RefactorSuggestion } from "@/types";
+import { isSupabaseConfigured } from "@/lib/db";
+import { requireRequestAuth } from "@/lib/auth-guard";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRequestAuth(req);
+  if ("response" in auth) {
+    return auth.response;
+  }
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { status: 503 },
+    );
   }
 
   try {
