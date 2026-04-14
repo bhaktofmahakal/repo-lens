@@ -2,7 +2,7 @@
   "name": "repolens-vscode",
   "displayName": "RepoLens",
   "description": "Ask questions about your repository with citation-backed answers from RepoLens.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "repolens",
   "license": "MIT",
   "repository": {
