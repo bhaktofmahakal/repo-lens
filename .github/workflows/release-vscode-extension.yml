@@ -39,7 +39,7 @@ jobs:
         id: version
         working-directory: vscode-extension
         run: |
-          echo "value=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+          node -e "const fs=require('node:fs');const v=JSON.parse(fs.readFileSync('package.json','utf8')).version;fs.appendFileSync(process.env.GITHUB_OUTPUT,'value='+v+'\\n');"
 
       - name: Package VSIX
         working-directory: vscode-extension
