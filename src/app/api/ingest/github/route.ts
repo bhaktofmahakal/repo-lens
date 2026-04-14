@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ingestGitHub } from "@/lib/ingestion/github";
-import { isSupabaseConfigured, supabase } from "@/lib/db";
+import { Octokit } from "@octokit/rest";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { ingestGitHub } from "@/lib/ingestion/github";
+import { ingestPrivateGithubRepo } from "@/lib/ingestion/private-github";
+import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { requireRequestAuth } from "@/lib/auth-guard";
+import { capturePosthogEvent } from "@/lib/posthog";
+import {
+  checkPrivateRepoAllowed,
+  checkRepoLimit,
+  checkRepoSize,
+  LimitExceededError,
+} from "@/lib/check-limits";
+import {
+  getInstallationAccessToken,
+  getRepoInstallation,
+  isGithubAppConfigured,
+} from "@/lib/github-app";
+import { decryptGithubToken } from "@/lib/github-token-crypto";
 
 export const maxDuration = 60;
 
@@ -12,8 +27,20 @@ const githubUrlSchema = z
   .trim()
   .regex(/^https:\/\/github\.com\/[^\/]+\/[^\/]+(?:\.git)?\/?$/);
 
+type HttpLikeError = {
+  status?: number;
+  response?: { status?: number };
+};
+
+function readStatus(error: unknown): number {
+  const err = error as HttpLikeError;
+  return Number(err?.status || err?.response?.status || 0);
+}
+
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   const requestId = crypto.randomUUID();
+
   const auth = await requireRequestAuth(req);
   if ("response" in auth) {
     return auth.response;
@@ -21,41 +48,170 @@ export async function POST(req: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { error: "Database is not configured.", code: "DB_CONFIG_MISSING" },
       { status: 503 },
     );
   }
 
   let sourceId: string | null = null;
+  let installationId: number | null = null;
 
   try {
+    const { plan } = await checkRepoLimit(auth.user.id);
+
     const { url } = await req.json();
     const validatedUrl = githubUrlSchema.parse(url).replace(/\/$/, "").replace(/\.git$/, "");
 
-    sourceId = uuidv4();
-    const urlParts = validatedUrl.replace('https://github.com/', '').split('/');
-    const repoName = urlParts[1]?.replace(/\.git$/, "");
-    if (!repoName) {
-      return NextResponse.json({ error: "Invalid GitHub repository URL." }, { status: 400 });
+    const urlParts = validatedUrl.replace("https://github.com/", "").split("/");
+    const owner = urlParts[0];
+    const repo = urlParts[1]?.replace(/\.git$/, "");
+    if (!owner || !repo) {
+      return NextResponse.json(
+        { error: "Invalid GitHub repository URL.", code: "INVALID_GITHUB_URL" },
+        { status: 400 },
+      );
     }
 
+    let appInstallation:
+      | {
+          installationId: number;
+          accountLogin: string;
+          accountType: string;
+        }
+      | null = null;
+
+    if (isGithubAppConfigured()) {
+      try {
+        appInstallation = await getRepoInstallation(owner, repo);
+        if (appInstallation) {
+          installationId = appInstallation.installationId;
+
+          await supabase.from("github_app_installations").upsert({
+            installation_id: appInstallation.installationId,
+            user_id: auth.user.id,
+            account_login: appInstallation.accountLogin,
+            account_type: appInstallation.accountType,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch {
+        appInstallation = null;
+      }
+    }
+
+    const { data: tokenRow } = await supabase
+      .from("github_tokens")
+      .select("encrypted_token")
+      .eq("user_id", auth.user.id)
+      .maybeSingle();
+
+    let githubToken: string | undefined;
+    if (tokenRow?.encrypted_token) {
+      try {
+        githubToken = decryptGithubToken(tokenRow.encrypted_token);
+      } catch {
+        githubToken = undefined;
+      }
+    }
+
+    if (!githubToken && appInstallation) {
+      try {
+        githubToken = await getInstallationAccessToken(appInstallation.installationId);
+      } catch {
+        githubToken = githubToken || undefined;
+      }
+    }
+
+    const octokit = githubToken ? new Octokit({ auth: githubToken }) : new Octokit();
+
+    let repoMeta: Awaited<ReturnType<Octokit["repos"]["get"]>>["data"];
+    try {
+      const repoResponse = await octokit.repos.get({ owner, repo });
+      repoMeta = repoResponse.data;
+    } catch (error) {
+      const status = readStatus(error);
+      if (status === 404 || status === 403) {
+        return NextResponse.json(
+          {
+            error:
+              "Repository not found or inaccessible. Connect GitHub and grant repo scope for private repositories.",
+            code: "REPO_INACCESSIBLE",
+          },
+          { status: 400 },
+        );
+      }
+
+      throw error;
+    }
+
+    checkRepoSize((repoMeta.size || 0) * 1024, plan);
+
+    if (repoMeta.private) {
+      checkPrivateRepoAllowed(plan);
+      if (!githubToken) {
+        return NextResponse.json(
+          {
+            error: "Connect GitHub App (recommended) or OAuth to ingest private repositories.",
+            code: "GITHUB_CONNECT_REQUIRED",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    sourceId = uuidv4();
     const { error: sourceError } = await supabase.from("sources").insert({
       id: sourceId,
+      user_id: auth.user.id,
       type: "github",
-      name: repoName,
+      name: repo,
       github_url: validatedUrl,
+      github_installation_id: installationId,
     });
 
     if (sourceError) {
-      console.error(`[${requestId}] Failed inserting source row:`, sourceError);
       throw sourceError;
     }
 
-    const result = await ingestGitHub(validatedUrl, sourceId);
+    const defaultBranch = repoMeta.default_branch || "main";
+    const result = repoMeta.private
+      ? await ingestPrivateGithubRepo({
+          sourceId,
+          userId: auth.user.id,
+          owner,
+          repo,
+          defaultBranch,
+          githubToken: githubToken as string,
+        })
+      : await ingestGitHub(validatedUrl, sourceId, {
+          githubToken,
+          maxRepoSizeMb: Number.POSITIVE_INFINITY,
+          userId: auth.user.id,
+        });
+
+    void capturePosthogEvent(auth.user.id, {
+      event: "repo_ingested",
+      properties: {
+        repo_size_mb: Number((((repoMeta.size || 0) * 1024) / (1024 * 1024)).toFixed(2)),
+        ingest_method: "github",
+        file_count: result.fileCount,
+        duration_ms: Date.now() - startedAt,
+      },
+    });
 
     return NextResponse.json(result);
-  } catch (error: any) {
-    console.error(`[${requestId}] Ingest GitHub Error:`, error);
+  } catch (error: unknown) {
+    if (error instanceof LimitExceededError) {
+      return NextResponse.json(
+        {
+          error: "LIMIT_EXCEEDED",
+          plan_required: error.planRequired,
+          message: error.message,
+        },
+        { status: 402 },
+      );
+    }
+
     if (sourceId) {
       const { error: rollbackError } = await supabase.from("sources").delete().eq("id", sourceId);
       if (rollbackError) {
@@ -64,37 +220,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Invalid GitHub repository URL." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid GitHub repository URL.", code: "INVALID_GITHUB_URL" },
+        { status: 400 },
+      );
     }
 
-    const githubStatus = Number(error?.status || error?.response?.status || 0);
-    if (githubStatus === 404 || githubStatus === 403) {
-      return NextResponse.json(
-        { error: "Repository not found or inaccessible. Only public GitHub repositories are supported." },
-        { status: 400 },
-      );
-    }
-    if (githubStatus === 401) {
-      return NextResponse.json(
-        {
-          error:
-            "GitHub API authentication failed. Remove invalid GITHUB_TOKEN or set a valid token in environment variables.",
-        },
-        { status: 400 },
-      );
-    }
+    const githubStatus = readStatus(error);
     if (githubStatus === 429) {
       return NextResponse.json(
         {
-          error: "GitHub API rate limit reached. Retry later or configure a valid GITHUB_TOKEN.",
+          error: "GitHub API rate limit reached. Retry later.",
+          code: "GITHUB_RATE_LIMIT",
         },
         { status: 429 },
       );
     }
 
+    console.error(`[${requestId}] Ingest GitHub Error`);
     return NextResponse.json(
       {
-        error: error.message || "Failed to ingest GitHub repo",
+        error: "Failed to ingest GitHub repo",
+        code: "INTERNAL_SERVER_ERROR",
         requestId,
       },
       { status: 500 },

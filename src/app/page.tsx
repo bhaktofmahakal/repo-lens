@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Github, Search, Zap } from "lucide-react";
 import { HeroIsoBlocks } from "@/components/ui/HeroIsoBlocks";
@@ -122,7 +121,6 @@ function TechStackStrip() {
 
 export default function Home() {
   const reduce = useReducedMotion();
-  useSession();
 
   return (
     <main className="relative bg-[#151515] text-white">
@@ -166,7 +164,7 @@ export default function Home() {
               transition={reduce ? { duration: 0 } : { duration: 0.35, ease: [0.23, 1, 0.32, 1], delay: 0.22 }}
               className="mt-8 flex flex-wrap gap-3"
             >
-              <Link href="/sign-up" className="inline-flex h-11 items-center gap-2 rounded-[12px] bg-[#F04D26] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]">
+              <Link href="/login" className="inline-flex h-11 items-center gap-2 rounded-[12px] bg-[#F04D26] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]">
                 <Search className="h-4 w-4" />Get Started Free
               </Link>
               <a href="#how" className="inline-flex h-11 items-center gap-2 rounded-[12px] border border-white/15 bg-white/5 px-5 text-sm font-semibold text-white/80 transition-colors hover:bg-white/10">
@@ -259,7 +257,7 @@ export default function Home() {
           <p className="mx-auto mt-4 max-w-xl text-base text-[#7d7d87]">
             Sign up free and start asking your codebase in natural language — answers in seconds, citations included.
           </p>
-          <Link href="/sign-up" className="mt-8 inline-flex h-12 items-center gap-2 rounded-[14px] bg-[#F04D26] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]">
+          <Link href="/login" className="mt-8 inline-flex h-12 items-center gap-2 rounded-[14px] bg-[#F04D26] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]">
             <Zap className="h-4 w-4" />Get Started Free
           </Link>
         </div>

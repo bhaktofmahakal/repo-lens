@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
-import { AuthProvider } from "@/components/providers/AuthProvider";
+import { PosthogProvider } from "@/components/PosthogProvider";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -26,9 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} ${jetBrainsMono.variable} min-h-screen bg-[#151515] text-white antialiased`}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <PosthogProvider>{children}</PosthogProvider>
       </body>
     </html>
   );

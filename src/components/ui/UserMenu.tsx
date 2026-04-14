@@ -3,12 +3,23 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, ChevronDown } from "lucide-react";
-import { signOut as nextAuthSignOut, useSession } from "next-auth/react";
+import { createClient } from "@/lib/supabase/client";
+
+type MenuUser = {
+  email?: string;
+};
 
 export function UserMenu() {
-  const { data: session } = useSession();
+  const [user, setUser] = useState<MenuUser | null>(null);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user ? { email: data.user.email } : null);
+    });
+  }, []);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -19,13 +30,14 @@ export function UserMenu() {
   }, []);
 
   async function signOut() {
-    await nextAuthSignOut({ callbackUrl: "/" });
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.href = "/login";
   }
 
-  const user = session?.user;
   if (!user) return null;
 
-  const displayName = user.name || user.email?.split("@")[0] || "User";
+  const displayName = user.email?.split("@")[0] || "User";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (

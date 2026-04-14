@@ -7,6 +7,8 @@ import { extractCitations, formatRetrievedSnippets } from "@/lib/qa/citations";
 import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { AskResponse } from "@/types";
 import { requireRequestAuth } from "@/lib/auth-guard";
+import { capturePosthogEvent } from "@/lib/posthog";
+import { checkQueryLimit, LimitExceededError } from "@/lib/check-limits";
 
 const INSUFFICIENT_EVIDENCE_PREFIX = "insufficient evidence in the indexed codebase";
 const QUESTION_STOPWORDS = new Set([
@@ -136,7 +138,7 @@ export async function POST(req: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { error: "Database is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
       { status: 503 },
     );
   }
@@ -150,6 +152,29 @@ export async function POST(req: NextRequest) {
     }
     if (!UUID_RE.test(String(sourceId))) {
       return NextResponse.json({ error: "Invalid Source ID." }, { status: 400 });
+    }
+
+    await checkQueryLimit(auth.user.id);
+
+    const { data: sourceRow, error: sourceLookupError } = await supabase
+      .from("sources")
+      .select("id")
+      .eq("id", sourceId)
+      .eq("user_id", auth.user.id)
+      .maybeSingle();
+
+    if (sourceLookupError) {
+      return NextResponse.json(
+        { error: "Failed to validate source ownership.", code: "SOURCE_LOOKUP_FAILED" },
+        { status: 500 },
+      );
+    }
+
+    if (!sourceRow) {
+      return NextResponse.json(
+        { error: "Source not found.", code: "SOURCE_NOT_FOUND" },
+        { status: 404 },
+      );
     }
 
     let queryEmbedding: number[] | undefined;
@@ -195,6 +220,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: historyError } = await supabase.from("qa_history").insert({
+      user_id: auth.user.id,
       source_id: sourceId,
       question: normalizedQuestion,
       answer,
@@ -214,9 +240,32 @@ export async function POST(req: NextRequest) {
       response.note_when_insufficient_evidence = noteWhenInsufficientEvidence;
     }
 
+    void capturePosthogEvent(auth.user.id, {
+      event: "query_submitted",
+      properties: {
+        session_id: String(sourceId),
+        query_length: normalizedQuestion.length,
+        chunk_count: chunks.length,
+      },
+    });
+
     return NextResponse.json(response);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    if (error instanceof LimitExceededError) {
+      return NextResponse.json(
+        {
+          error: "LIMIT_EXCEEDED",
+          plan_required: error.planRequired,
+          message: error.message,
+        },
+        { status: 402 },
+      );
+    }
+
     console.error("Ask API Error:", error);
-    return NextResponse.json({ error: error.message || "Failed to process question" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to process question", code: "INTERNAL_SERVER_ERROR" },
+      { status: 500 },
+    );
   }
 }

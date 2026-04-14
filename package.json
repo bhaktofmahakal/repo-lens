@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "vitest run && tsx --test tests/**/*.test.ts",
+    "test:vitest": "vitest run"
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.12",
     "@octokit/rest": "^21.0.2",
+    "@stripe/stripe-js": "^9.1.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.48.1",
     "@types/bcryptjs": "^2.4.6",
@@ -22,10 +24,13 @@
     "lucide-react": "^0.475.0",
     "next": "^15.5.12",
     "next-auth": "^4.24.13",
+    "posthog-js": "^1.367.0",
+    "posthog-node": "^5.21.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "stripe": "^22.0.1",
     "uuid": "^11.1.0",
     "zod": "^3.24.2"
   },
@@ -41,6 +46,7 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.4"
   }
 }

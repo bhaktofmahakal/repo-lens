@@ -5,6 +5,31 @@
       "source": "bhaktofmahakal/agent-skills",
       "sourceType": "github",
       "computedHash": "b37a83997c79b9397e4bbf90770fc8306240ca163f11ddd85e35939e8ae94073"
+    },
+    "lemon-squeezy": {
+      "source": "membranedev/application-skills",
+      "sourceType": "github",
+      "computedHash": "4a5060110f423d454a825fe30cf00a50f345500b1a0eaa67ba090d5c72c71da4"
+    },
+    "lemonsqueezy": {
+      "source": "miketromba/lemonsqueezy-cli",
+      "sourceType": "github",
+      "computedHash": "74a1c96b6ff2ace5adfaf064897cbdd2a2e76a80bf3cd7fec3dad9f3d8505512"
+    },
+    "lemonsqueezy-ui-skills": {
+      "source": "ihlamury/design-skills",
+      "sourceType": "github",
+      "computedHash": "fec10108a56b5e4a5a998d99e453e0142c92d58f73955b566c2cf7bf8da1fcdc"
+    },
+    "oauth": {
+      "source": "vercel-labs/portless",
+      "sourceType": "github",
+      "computedHash": "9dbf0a5cc15d805924816a4df6654b105a163618ff986c79f6974211164b34a7"
+    },
+    "posthog-instrumentation": {
+      "source": "posthog/posthog-for-claude",
+      "sourceType": "github",
+      "computedHash": "2651cf543b937bec0e08d50486e13ed3176ccd285477738d3edb47c356eeeac9"
     }
   }
 }

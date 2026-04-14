@@ -15,12 +15,19 @@ import { IngestResult } from "@/types";
 const CHUNK_INSERT_BATCH_SIZE = 250;
 const GITHUB_INGEST_TIME_BUDGET_MS = 45_000;
 
-async function fetchTextWithTimeout(url: string, timeoutMs: number): Promise<string | null> {
+async function fetchTextWithTimeout(url: string, timeoutMs: number, githubToken?: string): Promise<string | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: githubToken
+        ? {
+            Authorization: `Bearer ${githubToken}`,
+          }
+        : undefined,
+    });
     if (!response.ok) return null;
     return await response.text();
   } catch (error) {
@@ -31,8 +38,8 @@ async function fetchTextWithTimeout(url: string, timeoutMs: number): Promise<str
   }
 }
 
-function createOctokitClient(): Octokit {
-  const token = process.env.GITHUB_TOKEN;
+function createOctokitClient(githubToken?: string): Octokit {
+  const token = githubToken || process.env.GITHUB_TOKEN;
   if (isConfiguredEnvValue(token)) {
     return new Octokit({ auth: token });
   }
@@ -41,16 +48,32 @@ function createOctokitClient(): Octokit {
   return new Octokit();
 }
 
-export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<IngestResult> {
+type IngestGitHubOptions = {
+  githubToken?: string;
+  allowPrivate?: boolean;
+  maxRepoSizeMb?: number;
+  userId?: string;
+};
+
+export async function ingestGitHub(
+  repoUrl: string,
+  sourceId: string,
+  options?: IngestGitHubOptions,
+): Promise<IngestResult> {
   const startedAt = Date.now();
-  const octokit = createOctokitClient();
+  const octokit = createOctokitClient(options?.githubToken);
   const urlParts = repoUrl.replace('https://github.com/', '').split('/');
   if (urlParts.length < 2) throw new Error("Invalid GitHub URL");
   const [owner, repo] = urlParts;
 
   const { data: repoMeta } = await octokit.repos.get({ owner, repo });
-  if (repoMeta.private) {
+  if (repoMeta.private && !options?.allowPrivate) {
     throw new Error("Private repositories are not supported.");
+  }
+
+  const repoSizeBytes = (repoMeta.size || 0) * 1024;
+  if (options?.maxRepoSizeMb && repoSizeBytes > options.maxRepoSizeMb * 1024 * 1024) {
+    throw new Error(`Repository exceeds the ${options.maxRepoSizeMb} MB limit.`);
   }
 
   const defaultBranch = repoMeta.default_branch || "main";
@@ -94,7 +117,7 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
         }
 
         const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${entry.path}`;
-        const rawContent = await fetchTextWithTimeout(rawUrl, 15000);
+        const rawContent = await fetchTextWithTimeout(rawUrl, 15000, options?.githubToken);
         if (!rawContent) return null;
         if (isProbablyBinaryContent(rawContent)) return null;
 
@@ -103,7 +126,11 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
 
         const sourcePath = sanitizeForDatabase(entry.path!);
         const sourceUrl = sanitizeForDatabase(`https://github.com/${owner}/${repo}/blob/${defaultBranch}/${entry.path}`);
-        const fileChunks = chunkFile(sourcePath, content, sourceUrl).map((chunk) => ({ ...chunk, source_id: sourceId }));
+        const fileChunks = chunkFile(sourcePath, content, sourceUrl).map((chunk) => ({
+          ...chunk,
+          source_id: sourceId,
+          user_id: options?.userId,
+        }));
         if (fileChunks.length === 0) return null;
 
         return {
@@ -169,5 +196,6 @@ export async function ingestGitHub(repoUrl: string, sourceId: string): Promise<I
     sourceId,
     fileCount: totalFiles,
     chunkCount: allChunks.length,
+    repoSizeBytes,
   };
 }

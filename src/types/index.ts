@@ -1,5 +1,7 @@
 export interface Source {
   id: string;
+  user_id?: string;
+  github_installation_id?: number | null;
   type: 'zip' | 'github';
   name: string;
   github_url?: string;
@@ -49,6 +51,7 @@ export interface IngestResult {
   sourceId: string;
   fileCount: number;
   chunkCount: number;
+  repoSizeBytes?: number;
 }
 
 export interface StatusResult {

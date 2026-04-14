@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { error: "Database is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
       { status: 503 },
     );
   }
@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       .from("qa_history")
       .select("*")
       .eq("source_id", sourceId)
+      .eq("user_id", auth.user.id)
       .order("created_at", { ascending: false })
       .limit(10);
 

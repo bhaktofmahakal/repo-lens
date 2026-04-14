@@ -4,8 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Menu, X, Search, Activity, History, Zap } from "lucide-react";
-import { UserMenu } from "@/components/ui/UserMenu";
-import { useSession } from "next-auth/react";
 
 const NAV_LINKS = [
   { href: "#how", label: "How it works" },
@@ -21,18 +19,10 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
 };
 
 export function Navbar() {
-  const { data: session, status } = useSession();
-  const user = session?.user;
-  // Treat "loading" the same as logged-out so the CTA never changes size
-  const isAuthenticated = status === "authenticated" && !!user;
   const [scrolled, setScrolled] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const reduce = useReducedMotion();
-
-  // Delay auth-dependent render until after hydration to prevent layout shift
-  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 28);
@@ -141,17 +131,12 @@ export function Navbar() {
           {/* Right side: CTA + hamburger. Fixed-size container prevents layout shift on session load. */}
           <div className="flex items-center gap-2">
             <div className="hidden md:block">
-              {mounted && isAuthenticated ? (
-                <UserMenu />
-              ) : (
-                <Link
-                  href="/sign-in"
-                  className="rounded-full bg-[#F04D26] px-4 py-1.5 text-sm font-semibold text-white ring-0 transition-all hover:bg-[#de4723] hover:ring-2 hover:ring-[#F04D26]/30"
-                  style={{ visibility: mounted ? "visible" : "visible" }}
-                >
-                  Sign In
-                </Link>
-              )}
+              <Link
+                href="/login"
+                className="rounded-full bg-[#F04D26] px-4 py-1.5 text-sm font-semibold text-white ring-0 transition-all hover:bg-[#de4723] hover:ring-2 hover:ring-[#F04D26]/30"
+              >
+                Sign In
+              </Link>
             </div>
             {/* Hamburger (mobile) */}
             <motion.button
@@ -251,20 +236,14 @@ export function Navbar() {
 
                 {/* Mobile CTA */}
                 <div className="mt-1.5 border-t border-white/[0.06] pt-2">
-                  {mounted && isAuthenticated ? (
-                    <div className="px-2 pb-1">
-                      <UserMenu />
-                    </div>
-                  ) : (
-                    <Link
-                      href="/sign-in"
-                      onClick={() => setMobileOpen(false)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]"
-                    >
-                      <Zap className="h-4 w-4" />
-                      Sign In &mdash; it&apos;s free
-                    </Link>
-                  )}
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]"
+                  >
+                    <Zap className="h-4 w-4" />
+                    Sign In &mdash; it&apos;s free
+                  </Link>
                 </div>
               </div>
             </motion.div>

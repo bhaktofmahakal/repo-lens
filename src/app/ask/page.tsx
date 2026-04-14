@@ -4,15 +4,70 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, ChevronDown, Code2, ExternalLink, Github, History, Loader2, LogOut, Search, Upload, Wand2 } from "lucide-react";
-import { signOut } from "next-auth/react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  Code2,
+  ExternalLink,
+  Github,
+  History,
+  Loader2,
+  LogOut,
+  Search,
+  ThumbsDown,
+  ThumbsUp,
+  Upload,
+  Wand2,
+} from "lucide-react";
 import { AskResponse, Citation, RefactorResponse } from "@/types";
+import { createClient } from "@/lib/supabase/client";
 
 type EvidenceTag = {
   id: string;
   label: string;
   count: number;
 };
+
+type LimitState = {
+  planRequired: "pro" | "team";
+  message: string;
+};
+
+function UpgradeModal({
+  state,
+  onClose,
+}: {
+  state: LimitState;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111111] p-6">
+        <h2 className="text-xl font-semibold text-white">Upgrade Required</h2>
+        <p className="mt-2 text-sm text-white/70">{state.message}</p>
+        <p className="mt-2 text-xs uppercase tracking-wide text-[#F04D26]">
+          Recommended plan: {state.planRequired}
+        </p>
+        <div className="mt-5 flex gap-2">
+          <a
+            href="/dashboard/billing"
+            className="rounded-lg bg-[#F04D26] px-4 py-2 text-sm font-medium text-white hover:bg-[#de4723]"
+          >
+            Upgrade to {state.planRequired === "pro" ? "Pro" : "Team"}
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/80 hover:bg-white/5"
+          >
+            Not now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
@@ -165,6 +220,7 @@ function IngestDashboard() {
   const [githubUrl, setGithubUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limitState, setLimitState] = useState<LimitState | null>(null);
   const router = useRouter();
 
   const handleZipUpload = async (e: React.FormEvent) => {
@@ -176,6 +232,13 @@ function IngestDashboard() {
     try {
       const res = await fetch("/api/ingest/zip", { method: "POST", body: formData });
       const data = await res.json();
+      if (res.status === 402 && data?.error === "LIMIT_EXCEEDED") {
+        setLimitState({
+          planRequired: data.plan_required || "pro",
+          message: data.message || "You reached your current plan limits.",
+        });
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Failed to upload ZIP");
       router.push(`/ask?sourceId=${data.sourceId}`);
     } catch (err: unknown) {
@@ -194,6 +257,13 @@ function IngestDashboard() {
         body: JSON.stringify({ url: githubUrl.trim() }),
       });
       const data = await res.json();
+      if (res.status === 402 && data?.error === "LIMIT_EXCEEDED") {
+        setLimitState({
+          planRequired: data.plan_required || "pro",
+          message: data.message || "You reached your current plan limits.",
+        });
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Failed to ingest GitHub repo");
       router.push(`/ask?sourceId=${data.sourceId}`);
     } catch (err: unknown) {
@@ -289,6 +359,7 @@ function IngestDashboard() {
           </div>
         )}
       </div>
+      {limitState ? <UpgradeModal state={limitState} onClose={() => setLimitState(null)} /> : null}
     </div>
   );
 }
@@ -308,6 +379,10 @@ function AskContent() {
   const [error, setError] = useState<string | null>(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [evidenceExpanded, setEvidenceExpanded] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<"up" | "down" | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [limitState, setLimitState] = useState<LimitState | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -319,6 +394,10 @@ function AskContent() {
     setError(null);
     setEvidenceSearch("");
     setActiveTagId("");
+    setFeedbackLoading(false);
+    setFeedbackRating(null);
+    setFeedbackError(null);
+    setLimitState(null);
   }, [sourceId]);
 
   const normalizedEvidenceSearch = normalizeSearchValue(evidenceSearch);
@@ -365,6 +444,13 @@ function AskContent() {
       });
 
       const data = await res.json();
+      if (res.status === 402 && data?.error === "LIMIT_EXCEEDED") {
+        setLimitState({
+          planRequired: data.plan_required || "pro",
+          message: data.message || "You reached your current plan limits.",
+        });
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Failed to get answer");
       setResponse(data);
       setAskedQuestion(normalizedQuestion);
@@ -372,10 +458,45 @@ function AskContent() {
       setActiveTagId("");
       setRefactorResponse(null);
       setRefactorError(null);
+      setFeedbackRating(null);
+      setFeedbackError(null);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFeedback = async (rating: "up" | "down") => {
+    if (!sourceId || !response || !askedQuestion || feedbackRating || feedbackLoading) {
+      return;
+    }
+
+    setFeedbackLoading(true);
+    setFeedbackError(null);
+
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sourceId,
+          query_text: askedQuestion,
+          answer_text: response.answer,
+          rating,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to submit feedback");
+      }
+
+      setFeedbackRating(rating);
+    } catch {
+      setFeedbackError("Unable to submit feedback right now.");
+    } finally {
+      setFeedbackLoading(false);
     }
   };
 
@@ -405,7 +526,10 @@ function AskContent() {
   const handleLogout = async () => {
     setLogoutLoading(true);
     try {
-      await signOut({ callbackUrl: "/" });
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
     } finally {
       setLogoutLoading(false);
     }
@@ -506,6 +630,39 @@ function AskContent() {
                       {response.answer}
                     </ReactMarkdown>
                   </div>
+                  <div className="mt-5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleFeedback("up")}
+                      disabled={feedbackLoading || feedbackRating !== null}
+                      className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-white/80 transition-colors hover:border-[#F04D26]/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <ThumbsUp className="h-4 w-4" />
+                      Helpful
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleFeedback("down")}
+                      disabled={feedbackLoading || feedbackRating !== null}
+                      className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-white/80 transition-colors hover:border-[#F04D26]/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <ThumbsDown className="h-4 w-4" />
+                      Needs work
+                    </button>
+                    {feedbackLoading ? (
+                      <span className="inline-flex items-center gap-2 text-xs text-white/60">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Saving feedback...
+                      </span>
+                    ) : null}
+                    {feedbackRating ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
+                        <Check className="h-3.5 w-3.5" />
+                        Feedback submitted
+                      </span>
+                    ) : null}
+                  </div>
+                  {feedbackError ? <p className="mt-2 text-xs text-red-300">{feedbackError}</p> : null}
                   {response.note_when_insufficient_evidence ? (
                     <div className="mt-4 rounded-lg border border-[#F04D26]/30 bg-[#F04D26]/8 px-3 py-2 text-sm text-[#ff6e4a]">
                       {response.note_when_insufficient_evidence}
@@ -718,6 +875,7 @@ function AskContent() {
         </div>
       </aside>
     </div>
+    {limitState ? <UpgradeModal state={limitState} onClose={() => setLimitState(null)} /> : null}
     </div>
   );
 }

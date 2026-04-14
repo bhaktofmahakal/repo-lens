@@ -14,7 +14,7 @@ import { IngestResult } from "@/types";
 
 const CHUNK_INSERT_BATCH_SIZE = 250;
 
-export async function ingestZip(buffer: Buffer, sourceId: string): Promise<IngestResult> {
+export async function ingestZip(buffer: Buffer, sourceId: string, userId: string): Promise<IngestResult> {
   const zip = new AdmZip(buffer);
   const zipEntries = zip.getEntries();
   
@@ -43,7 +43,7 @@ export async function ingestZip(buffer: Buffer, sourceId: string): Promise<Inges
     const filePath = sanitizeForDatabase(entry.entryName);
     const sourceUrl = `/source?sourceId=${sourceId}&path=${encodeURIComponent(filePath)}`;
     const fileChunks = chunkFile(filePath, content, sourceUrl);
-    allChunks.push(...fileChunks.map(c => ({ ...c, source_id: sourceId })));
+    allChunks.push(...fileChunks.map(c => ({ ...c, source_id: sourceId, user_id: userId })));
   }
 
   if (allChunks.length > 0) {

@@ -4,8 +4,11 @@ import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { config } from "@/lib/config";
 import { v4 as uuidv4 } from "uuid";
 import { requireRequestAuth } from "@/lib/auth-guard";
+import { capturePosthogEvent } from "@/lib/posthog";
+import { checkRepoLimit, checkRepoSize, LimitExceededError } from "@/lib/check-limits";
 
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   const auth = await requireRequestAuth(req);
   if ("response" in auth) {
     return auth.response;
@@ -13,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { error: "Database is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
       { status: 503 },
     );
   }
@@ -21,6 +24,8 @@ export async function POST(req: NextRequest) {
   let sourceId: string | null = null;
 
   try {
+    const { plan } = await checkRepoLimit(auth.user.id);
+
     const contentType = req.headers.get("content-type") || "";
     if (!contentType.toLowerCase().includes("multipart/form-data")) {
       return NextResponse.json(
@@ -55,9 +60,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    checkRepoSize(file.size, plan);
+
     sourceId = uuidv4();
     const { error: sourceError } = await supabase.from("sources").insert({
       id: sourceId,
+      user_id: auth.user.id,
       type: "zip",
       name: file.name,
     });
@@ -65,7 +73,7 @@ export async function POST(req: NextRequest) {
     if (sourceError) throw sourceError;
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await ingestZip(buffer, sourceId);
+    const result = await ingestZip(buffer, sourceId, auth.user.id);
     if (result.chunkCount === 0) {
       const { error: rollbackError } = await supabase.from("sources").delete().eq("id", sourceId);
       if (rollbackError) {
@@ -80,8 +88,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    void capturePosthogEvent(auth.user.id, {
+      event: "repo_ingested",
+      properties: {
+        repo_size_mb: Number((file.size / (1024 * 1024)).toFixed(2)),
+        ingest_method: "zip",
+        file_count: result.fileCount,
+        duration_ms: Date.now() - startedAt,
+      },
+    });
+
     return NextResponse.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    if (error instanceof LimitExceededError) {
+      return NextResponse.json(
+        {
+          error: "LIMIT_EXCEEDED",
+          plan_required: error.planRequired,
+          message: error.message,
+        },
+        { status: 402 },
+      );
+    }
+
     console.error("Ingest ZIP Error:", error);
     if (sourceId) {
       const { error: rollbackError } = await supabase.from("sources").delete().eq("id", sourceId);
@@ -90,6 +119,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ error: error.message || "Failed to ingest ZIP" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to ingest ZIP", code: "INTERNAL_SERVER_ERROR" },
+      { status: 500 },
+    );
   }
 }

@@ -1,39 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { User } from "@supabase/supabase-js";
 import { isConfiguredEnvValue } from "@/lib/config";
+import { createRouteHandlerClient } from "@/lib/supabase/server";
 
-const AUTH_CONFIG_ERROR = "Authentication is not configured. Set NEXTAUTH_SECRET in environment variables.";
+const AUTH_CONFIG_ERROR = "Authentication is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables.";
 
 export function isAuthConfigured(): boolean {
-  return isConfiguredEnvValue(process.env.NEXTAUTH_SECRET);
+  return (
+    isConfiguredEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    isConfiguredEnvValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  );
 }
 
-export async function getRequestTokenSafe(req: NextRequest) {
+export async function getRequestUserSafe(req: NextRequest): Promise<User | null> {
   if (!isAuthConfigured()) return null;
 
   try {
-    return await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    const response = NextResponse.next({ request: req });
+    const supabase = createRouteHandlerClient(req, response);
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) return null;
+    return user;
   } catch (error) {
-    console.error("Token parsing failed:", error);
+    console.error("User lookup failed:", error);
     return null;
   }
 }
 
-export async function requireRequestAuth(req: NextRequest): Promise<{ token: NonNullable<Awaited<ReturnType<typeof getToken>>> } | { response: NextResponse }> {
+type AuthResult =
+  | { user: User }
+  | { response: NextResponse };
+
+export async function requireRequestAuth(req: NextRequest): Promise<AuthResult> {
   if (!isAuthConfigured()) {
     return {
-      response: NextResponse.json({ error: AUTH_CONFIG_ERROR }, { status: 503 }),
+      response: NextResponse.json({ error: AUTH_CONFIG_ERROR, code: "AUTH_CONFIG_MISSING" }, { status: 503 }),
     };
   }
 
-  const token = await getRequestTokenSafe(req);
-  if (!token) {
+  const user = await getRequestUserSafe(req);
+  if (!user) {
     return {
-      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      response: NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 }),
     };
   }
 
-  return { token };
+  return { user };
 }
 
 export function authConfigErrorMessage(): string {

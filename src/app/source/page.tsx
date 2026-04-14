@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { supabase } from "@/lib/db";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
 type SourcePageProps = {
   searchParams: Promise<{
@@ -12,6 +13,15 @@ export default async function SourcePage({ searchParams }: SourcePageProps) {
   const params = await searchParams;
   const sourceId = params.sourceId?.trim();
   const filePath = params.path?.trim();
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
 
   if (!sourceId || !filePath) {
     return (
@@ -21,6 +31,22 @@ export default async function SourcePage({ searchParams }: SourcePageProps) {
         <Link href="/" className="text-blue-600 underline">
           Back to Home
         </Link>
+      </main>
+    );
+  }
+
+  const { data: source } = await supabase
+    .from("sources")
+    .select("id")
+    .eq("id", sourceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!source) {
+    return (
+      <main className="max-w-4xl mx-auto px-4 py-10 space-y-4">
+        <h1 className="text-2xl font-semibold">File Viewer</h1>
+        <p className="text-sm text-red-600">This source was not found for your account.</p>
       </main>
     );
   }

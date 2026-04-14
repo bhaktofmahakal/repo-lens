@@ -1,32 +1,39 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getRequestTokenSafe, isAuthConfigured } from "@/lib/auth-guard";
+import { createMiddlewareClient } from "@/lib/supabase/server";
 
-const PROTECTED = ["/ask", "/history", "/source", "/status"];
+const PROTECTED = ["/dashboard", "/ask", "/history", "/source", "/status"];
 
 export async function middleware(request: NextRequest) {
-  const token = await getRequestTokenSafe(request);
+  const response = NextResponse.next({ request });
+  const supabase = createMiddlewareClient(request, response);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
-  if (isProtected && !token) {
+  if (isProtected && !user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/sign-in";
+    url.pathname = "/login";
     url.searchParams.set("callbackUrl", pathname);
-    if (!isAuthConfigured()) {
-      url.searchParams.set("error", "auth_config");
-    }
     return NextResponse.redirect(url);
   }
 
-  // Keep landing page accessible, but redirect authenticated users away from auth forms.
-  if (token && (pathname === "/sign-in" || pathname === "/sign-up")) {
+  if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/ask";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  if (pathname === "/sign-in" || pathname === "/sign-up") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  return response;
 }
 
 export const config = {
