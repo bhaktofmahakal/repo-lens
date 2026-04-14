@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { GitHubConnectionCard } from "./GitHubConnectionCard";
+import { isGithubAppConfigured } from "@/lib/github-app";
 
 type GithubSource = {
   id: string;
@@ -34,11 +35,13 @@ type DashboardPageProps = {
 function githubAppStatusMessage(status: string | undefined): string | null {
   if (!status) return null;
   if (status === "connected") return "GitHub App connected successfully.";
-  if (status === "config_error") return "GitHub App is not configured on the server yet.";
-  if (status === "missing_installation") return "Missing installation id in GitHub App setup callback.";
-  if (status === "installation_not_found") return "GitHub App installation not found.";
-  if (status === "save_failed") return "Failed to save GitHub App installation.";
-  if (status === "error") return "Unexpected error during GitHub App setup.";
+  if (status === "config_error" || status === "unavailable") {
+    return "GitHub App setup is currently unavailable. Please try again later.";
+  }
+  if (status === "missing_installation") return "GitHub did not return installation details. Please try again.";
+  if (status === "installation_not_found") return "GitHub App installation could not be verified. Please try again.";
+  if (status === "save_failed") return "GitHub App was installed, but linking it to your account failed. Please retry.";
+  if (status === "error") return "GitHub App setup did not complete. Please try again.";
   return null;
 }
 
@@ -67,7 +70,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const params = await searchParams;
   const githubConnectEnabled = process.env.NEXT_PUBLIC_ENABLE_GITHUB_CONNECT === "true";
   const githubAutoSyncEnabled = process.env.NEXT_PUBLIC_ENABLE_GITHUB_AUTOSYNC === "true";
-  const githubAppSlugConfigured = Boolean(process.env.NEXT_PUBLIC_GITHUB_APP_SLUG);
+  const githubAppConfigured = isGithubAppConfigured();
   const githubAppSetupMessage = githubAppStatusMessage(params.github_app);
 
   const supabase = await createClient();
@@ -119,7 +122,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     if (syncError) {
       syncStatusError = syncStatusError
         ? `${syncStatusError} Auto-sync history is unavailable.`
-        : "Auto-sync history is unavailable. Run latest schema migration to enable sync job tracking.";
+        : "Auto-sync history is unavailable right now.";
     } else {
       for (const row of (syncRows as SyncJob[]) || []) {
         if (!latestSyncJobBySource.has(row.source_id)) {
@@ -168,7 +171,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <article className="rounded-xl border border-white/10 bg-[#111111] p-5">
           <h2 className="text-lg font-semibold">GitHub Private Repo Connect</h2>
           <p className="mt-2 text-sm text-white/60">
-            Temporarily disabled. Public GitHub ingest still works.
+            Private repository connection is currently unavailable. Public GitHub ingest still works.
           </p>
         </article>
       )}
@@ -197,19 +200,29 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
         {githubAppStatusError ? <p className="mt-3 text-xs text-amber-200">{githubAppStatusError}</p> : null}
 
-        {!githubAppSlugConfigured ? (
+        {!githubAppConfigured ? (
           <p className="mt-3 text-xs text-white/55">
-            Configure NEXT_PUBLIC_GITHUB_APP_SLUG, GITHUB_APP_ID, and GITHUB_APP_PRIVATE_KEY to activate this flow.
+            GitHub App setup is currently unavailable.
           </p>
         ) : null}
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <a
-            href="/api/github/app/install"
-            className="rounded-lg bg-[#F04D26] px-4 py-2 text-sm font-medium text-white hover:bg-[#de4723]"
-          >
-            Install GitHub App
-          </a>
+          {githubAppConfigured ? (
+            <a
+              href="/api/github/app/install"
+              className="rounded-lg bg-[#F04D26] px-4 py-2 text-sm font-medium text-white hover:bg-[#de4723]"
+            >
+              Install GitHub App
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white/60"
+            >
+              Install GitHub App
+            </button>
+          )}
         </div>
 
         {githubAppInstallations.length > 0 ? (
@@ -255,7 +268,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
         {!githubAutoSyncEnabled ? (
           <p className="mt-3 text-xs text-white/55">
-            Set NEXT_PUBLIC_ENABLE_GITHUB_AUTOSYNC=true and configure GITHUB_WEBHOOK_SECRET to activate.
+            Automatic sync is currently unavailable.
           </p>
         ) : null}
 

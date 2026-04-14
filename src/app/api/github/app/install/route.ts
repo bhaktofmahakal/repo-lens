@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRequestAuth } from "@/lib/auth-guard";
 import { getGithubAppInstallUrl, isGithubAppConfigured } from "@/lib/github-app";
 
+function toDashboardStatusUrl(req: NextRequest, status: string): URL {
+  return new URL(`/dashboard?github_app=${encodeURIComponent(status)}`, req.nextUrl.origin);
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requireRequestAuth(req);
   if ("response" in auth) {
@@ -10,13 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!isGithubAppConfigured()) {
-    return NextResponse.json(
-      {
-        error: "GitHub App is not configured.",
-        code: "GITHUB_APP_NOT_CONFIGURED",
-      },
-      { status: 503 },
-    );
+    return NextResponse.redirect(toDashboardStatusUrl(req, "unavailable"));
   }
 
   const installUrl = getGithubAppInstallUrl();

@@ -78,7 +78,7 @@ export default async function BillingPage() {
         disabledReason={
           billingEnabled
             ? undefined
-            : "Stripe/GitHub billing is paused for now. Share Lemon Squeezy creds and I will switch billing provider."
+            : "Billing is temporarily unavailable. You can continue using the Free plan for now."
         }
       />
     </section>

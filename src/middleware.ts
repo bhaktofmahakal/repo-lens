@@ -4,13 +4,19 @@ import { createMiddlewareClient } from "@/lib/supabase/server";
 const PROTECTED = ["/dashboard", "/ask", "/history", "/source", "/status"];
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (pathname === "/favicon.ico") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/icon.svg";
+    return NextResponse.redirect(url);
+  }
+
   const response = NextResponse.next({ request });
   const supabase = createMiddlewareClient(request, response);
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
@@ -37,6 +43,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
+  matcher: ["/((?!_next/static|_next/image|api/).*)"],
 };
 

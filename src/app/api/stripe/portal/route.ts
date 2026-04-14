@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     if (!isStripeBillingEnabled() || !isStripeConfigured()) {
       return NextResponse.json(
         {
-          error: "Billing is currently disabled. Configure Stripe or switch to Lemon Squeezy integration.",
+          error: "Billing is currently unavailable.",
           code: "BILLING_NOT_CONFIGURED",
         },
         { status: 503 },

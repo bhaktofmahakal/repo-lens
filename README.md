@@ -72,6 +72,40 @@ Repo Lens is a codebase Q&A web application that provides verifiable, citation-b
 6. **Open the app**:
    Visit `http://localhost:3000` to start exploring.
 
+## CLI (Phase 3 Scaffold)
+
+Repo Lens now includes a local CLI scaffold for the public API workflow.
+
+1. **Run the CLI help**:
+  ```bash
+  npm run cli -- help
+  ```
+
+2. **Store your API key**:
+  ```bash
+  npm run cli -- auth login --key <YOUR_API_KEY> --base-url http://localhost:3000
+  ```
+
+3. **Ingest a repository**:
+  ```bash
+  npm run cli -- ingest https://github.com/vercel/next.js
+  ```
+
+4. **Check ingestion status**:
+  ```bash
+  npm run cli -- status
+  ```
+
+5. **Ask a question**:
+  ```bash
+  npm run cli -- ask "Where is auth middleware defined?"
+  ```
+
+Notes:
+- CLI config is stored at `~/.repolens/config.json`.
+- `ingest` saves the returned repo id as your default repo.
+- Override defaults anytime with `--api-key`, `--base-url`, and `--repo`.
+
 ## Deployment
 
 Repo Lens is built to be deployed on Vercel or any Next.js-compatible platform. Ensure all environment variables are correctly configured in your hosting environment.

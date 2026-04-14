@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Database is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { error: "Database service is currently unavailable." },
       { status: 503 },
     );
   }

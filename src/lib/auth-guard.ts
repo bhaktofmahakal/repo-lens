@@ -3,7 +3,7 @@ import { User } from "@supabase/supabase-js";
 import { isConfiguredEnvValue } from "@/lib/config";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
 
-const AUTH_CONFIG_ERROR = "Authentication is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables.";
+const AUTH_CONFIG_ERROR = "Authentication is currently unavailable.";
 
 export function isAuthConfigured(): boolean {
   return (

@@ -29,7 +29,7 @@ export function BillingActions({ billingEnabled, disabledReason }: BillingAction
       const data = await res.json();
       if (!res.ok || !data.url) {
         if (data?.code === "BILLING_NOT_CONFIGURED") {
-          throw new Error("Billing is currently disabled. Share Lemon Squeezy creds and I can wire it in.");
+          throw new Error("Billing is currently unavailable. Please try again later.");
         }
         throw new Error(data.error || "Unable to start checkout.");
       }
@@ -53,7 +53,7 @@ export function BillingActions({ billingEnabled, disabledReason }: BillingAction
 
       if (!res.ok || !data.url) {
         if (data?.code === "BILLING_NOT_CONFIGURED") {
-          throw new Error("Billing is currently disabled. Share Lemon Squeezy creds and I can wire it in.");
+          throw new Error("Billing is currently unavailable. Please try again later.");
         }
         throw new Error(data.error || "Unable to open billing portal.");
       }

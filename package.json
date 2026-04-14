@@ -2,11 +2,15 @@
   "name": "repo-lens",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "repolens": "src/cli/repolens.cjs"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "cli": "node src/cli/repolens.cjs",
     "test": "vitest run && tsx --test tests/**/*.test.ts",
     "test:vitest": "vitest run"
   },
