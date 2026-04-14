@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const vscode = require("vscode");
 
 const EXTENSION_SECRET_API_KEY = "repolens.apiKey";
@@ -11,6 +12,26 @@ function getConfig() {
 
 function getBaseUrl() {
   return String(getConfig().get("baseUrl", "")).trim().replace(/\/$/, "");
+}
+
+function getValidatedBaseUrl() {
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    throw new Error("Set repolens.baseUrl in settings first.");
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error("repolens.baseUrl is not a valid URL.");
+  }
+
+  if (!(parsed.protocol === "https:" || parsed.protocol === "http:")) {
+    throw new Error("repolens.baseUrl must start with http:// or https://");
+  }
+
+  return parsed.toString().replace(/\/$/, "");
 }
 
 function getDefaultRepoId() {
@@ -109,6 +130,23 @@ function toWebCitation(citation) {
   };
 }
 
+function isPathWithin(parentPath, candidatePath) {
+  const parent = path.resolve(parentPath);
+  const candidate = path.resolve(candidatePath);
+
+  if (process.platform === "win32") {
+    const parentLc = parent.toLowerCase();
+    const candidateLc = candidate.toLowerCase();
+    return candidateLc === parentLc || candidateLc.startsWith(parentLc + path.sep);
+  }
+
+  return candidate === parent || candidate.startsWith(parent + path.sep);
+}
+
+function createNonce() {
+  return crypto.randomBytes(16).toString("base64");
+}
+
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>]/g, (ch) => {
     if (ch === "&") return "&amp;";
@@ -122,18 +160,32 @@ function isLikelyZipUrl(value) {
 }
 
 async function requestJson({ baseUrl, route, method = "GET", apiKey, body }) {
-  const response = await fetch(`${baseUrl}${route}`, {
-    method,
-    headers: {
-      Accept: "application/json",
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), 30000);
 
-  let payload = null;
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${route}`, {
+      method,
+      headers: {
+        Accept: "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw new Error("Request timed out. Please try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+
   const text = await response.text();
+  let payload = null;
   try {
     payload = text ? JSON.parse(text) : null;
   } catch {
@@ -152,11 +204,7 @@ async function requestJson({ baseUrl, route, method = "GET", apiKey, body }) {
 }
 
 async function ingestRepoByUrl(context, sourceUrl) {
-  const baseUrl = getBaseUrl();
-  if (!baseUrl) {
-    throw new Error("Set repolens.baseUrl in settings first.");
-  }
-
+  const baseUrl = getValidatedBaseUrl();
   const apiKey = await getApiKey(context, true);
   if (!apiKey) {
     throw new Error("RepoLens API key is required.");
@@ -187,10 +235,7 @@ async function ingestRepoByUrl(context, sourceUrl) {
 }
 
 async function askRepoQuestion(context, repoId, question) {
-  const baseUrl = getBaseUrl();
-  if (!baseUrl) {
-    throw new Error("Set repolens.baseUrl in settings first.");
-  }
+  const baseUrl = getValidatedBaseUrl();
 
   const apiKey = await getApiKey(context, true);
   if (!apiKey) {
@@ -210,14 +255,10 @@ async function resolveCitationUri(filePath) {
   const cleaned = String(filePath || "").replace(/\\/g, "/").replace(/^\/+/, "");
   if (!cleaned) return null;
 
-  if (path.isAbsolute(cleaned) && fs.existsSync(cleaned)) {
-    return vscode.Uri.file(cleaned);
-  }
-
   const workspaceFolders = vscode.workspace.workspaceFolders || [];
   for (const folder of workspaceFolders) {
-    const candidate = path.join(folder.uri.fsPath, cleaned);
-    if (fs.existsSync(candidate)) {
+    const candidate = path.resolve(folder.uri.fsPath, cleaned);
+    if (isPathWithin(folder.uri.fsPath, candidate) && fs.existsSync(candidate)) {
       return vscode.Uri.file(candidate);
     }
   }
@@ -267,11 +308,16 @@ function renderAnswerHtml(answerText, citations) {
       return `<li><a href="${citation.commandUri}">${escapeHtml(label)}</a></li>`;
     })
     .join("");
+  const csp = [
+    "default-src 'none'",
+    "style-src 'unsafe-inline'",
+  ].join("; ");
 
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <style>
     body { font-family: var(--vscode-font-family); padding: 16px; line-height: 1.45; }
     h2 { margin: 0 0 10px; }
@@ -314,13 +360,22 @@ class RepoLensSidebarProvider {
     this.post({ type: "state", state: await this.getState() });
   }
 
-  renderHtml(state) {
+  renderHtml(webview, state) {
     const safeState = JSON.stringify(state).replace(/</g, "\\u003c");
+    const nonce = createNonce();
+    const csp = [
+      "default-src 'none'",
+      `img-src ${webview.cspSource} https:`,
+      `style-src ${webview.cspSource} 'unsafe-inline'`,
+      `script-src 'nonce-${nonce}'`,
+    ].join("; ");
+
     return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <style>
     body { font-family: var(--vscode-font-family); margin: 0; padding: 12px; }
     .meta { font-size: 12px; color: var(--vscode-descriptionForeground); margin-bottom: 10px; }
@@ -381,7 +436,7 @@ class RepoLensSidebarProvider {
   <div class="status" id="status"></div>
   <div class="output" id="output">Ask a question to see answers and citations.</div>
 
-  <script>
+  <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const state = ${safeState};
 
@@ -487,9 +542,10 @@ class RepoLensSidebarProvider {
     this.view = webviewView;
     webviewView.webview.options = {
       enableScripts: true,
-      enableCommandUris: true,
+      enableCommandUris: ["repolens.openCitation"],
+      localResourceRoots: [],
     };
-    webviewView.webview.html = this.renderHtml(await this.getState());
+    webviewView.webview.html = this.renderHtml(webviewView.webview, await this.getState());
 
     webviewView.onDidDispose(() => {
       this.view = null;
@@ -595,7 +651,10 @@ async function askQuestion(context) {
           "repolensAnswer",
           "RepoLens Answer",
           vscode.ViewColumn.Beside,
-          { enableCommandUris: true },
+          {
+            enableCommandUris: ["repolens.openCitation"],
+            localResourceRoots: [],
+          },
         );
         panel.webview.html = renderAnswerHtml(payload?.answer || "No answer.", citations);
       } catch (error) {

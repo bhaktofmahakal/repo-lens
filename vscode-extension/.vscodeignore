@@ -1,0 +1,8 @@
+.vscode/**
+.vscode-test/**
+**/.DS_Store
+**/*.map
+**/*.ts
+**/tsconfig.json
+**/node_modules/**
+test/**

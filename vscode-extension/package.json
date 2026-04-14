@@ -4,6 +4,22 @@
   "description": "Ask questions about your repository with citation-backed answers from RepoLens.",
   "version": "0.0.1",
   "publisher": "repolens",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bhaktofmahakal/repo-lens.git"
+  },
+  "homepage": "https://repo-lens-gamma.vercel.app",
+  "bugs": {
+    "url": "https://github.com/bhaktofmahakal/repo-lens/issues"
+  },
+  "keywords": [
+    "repolens",
+    "repository",
+    "code-search",
+    "llm",
+    "citations"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -20,6 +36,9 @@
     "onCommand:repolens.openCitation"
   ],
   "main": "./extension.js",
+  "scripts": {
+    "test": "node --test test/**/*.test.cjs"
+  },
   "contributes": {
     "commands": [
       {
