@@ -1,0 +1,51 @@
+{
+  "name": "repolens-vscode",
+  "displayName": "RepoLens",
+  "description": "Ask questions about your repository with citation-backed answers from RepoLens.",
+  "version": "0.0.1",
+  "publisher": "repolens",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:repolens.askQuestion",
+    "onCommand:repolens.setApiKey",
+    "onCommand:repolens.setRepoId",
+    "onCommand:repolens.openCitation"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "repolens.askQuestion",
+        "title": "RepoLens: Ask a Question"
+      },
+      {
+        "command": "repolens.setApiKey",
+        "title": "RepoLens: Set API Key"
+      },
+      {
+        "command": "repolens.setRepoId",
+        "title": "RepoLens: Set Default Repo ID"
+      }
+    ],
+    "configuration": {
+      "title": "RepoLens",
+      "properties": {
+        "repolens.baseUrl": {
+          "type": "string",
+          "default": "https://repo-lens-gamma.vercel.app",
+          "description": "RepoLens API base URL."
+        },
+        "repolens.repoId": {
+          "type": "string",
+          "default": "",
+          "description": "Default RepoLens repository ID for query commands."
+        }
+      }
+    }
+  }
+}
