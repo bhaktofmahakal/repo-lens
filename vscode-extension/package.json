@@ -11,7 +11,10 @@
     "Other"
   ],
   "activationEvents": [
+    "onView:repolens.sidebar",
     "onCommand:repolens.askQuestion",
+    "onCommand:repolens.ingestRepo",
+    "onCommand:repolens.refreshSidebar",
     "onCommand:repolens.setApiKey",
     "onCommand:repolens.setRepoId",
     "onCommand:repolens.openCitation"
@@ -24,6 +27,14 @@
         "title": "RepoLens: Ask a Question"
       },
       {
+        "command": "repolens.ingestRepo",
+        "title": "RepoLens: Ingest Repository URL"
+      },
+      {
+        "command": "repolens.refreshSidebar",
+        "title": "RepoLens: Refresh Sidebar"
+      },
+      {
         "command": "repolens.setApiKey",
         "title": "RepoLens: Set API Key"
       },
@@ -32,6 +43,23 @@
         "title": "RepoLens: Set Default Repo ID"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "repolens.sidebar",
+          "name": "RepoLens"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "repolens.refreshSidebar",
+          "when": "view == repolens.sidebar",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "RepoLens",
       "properties": {
