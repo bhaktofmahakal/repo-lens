@@ -1,133 +1,238 @@
 # Repo Lens
 
-Repo Lens is a codebase Q&A web application that provides verifiable, citation-backed answers to your questions about a codebase. It supports both ZIP uploads and public GitHub repository ingestion.
+Repo Lens is a codebase intelligence platform that answers natural-language questions about repositories using citation-backed retrieval.
 
-## Core Features
+The project now ships in four surfaces:
+- Web app (ingest, ask, history, share, billing)
+- Public API (`/api/v1/*`)
+- CLI (`repolens`)
+- VS Code extension (`vscode-extension`)
 
-- **Ingestion Pipeline**: 
-  - ZIP upload (max 25MB).
-  - Public GitHub URL ingestion (max 1000 files).
-  - Skips binary files and ignores common directories (e.g., `node_modules`).
-- **Chunking & Embeddings**:
-  - Chunks files into ~60 line windows with 10-line overlap.
-  - Generates 768-dimensional embeddings using Hugging Face's `sentence-transformers/all-mpnet-base-v2` model.
-- **RAG Architecture**:
-  - Vector search in Supabase using `pgvector` for efficient retrieval.
-  - LLM-powered answer generation using Groq's `llama-3.1-8b-instant` model.
-- **Verifiable Proof**:
-  - Answers include file paths and line ranges.
-  - Separate evidence panel displays retrieved code snippets.
-  - Clickable source links to original files.
-- **Optional Enhancements**:
-  - Search within retrieved evidence (file/snippet text filter).
-  - Auto-derived evidence tags (file extension, folder, and topic hints).
-  - Grounded refactor suggestions generated from retrieved snippets.
-- **Interaction History**:
-  - Displays the last 10 Q&A interactions for the ingested codebase.
-- **System Health**:
-  - Dedicated status page monitoring backend, database, and LLM provider health.
+## Product Status (April 2026)
 
-## What is Not Implemented (MVP Gaps)
+### Implemented
 
-- Private repository authentication (public only).
-- Large monorepo optimizations (size limits are enforced).
-- Multi-tenant user authentication or team permissions.
-- Auto-apply refactor edits (suggestions only).
+- ZIP and GitHub repository ingestion
+  - Web UI upload for local `.zip`
+  - API ingestion for GitHub URL or remote ZIP URL
+- Private GitHub repository support for paid plans via:
+  - GitHub OAuth token connect
+  - GitHub App installation token (recommended)
+- GitHub push auto-sync pipeline
+  - Webhook endpoint receives push events
+  - Matching indexed repos are re-ingested into fresh chunks
+- Retrieval and answer pipeline
+  - File chunking with overlap
+  - 768-dim embeddings via Hugging Face
+  - pgvector similarity search in Supabase
+  - LLM answer generation via Groq
+- Evidence UX
+  - File-path + line-range citations
+  - Retrieved snippet panel
+  - Evidence filtering and quick tags
+- Session features
+  - Q&A history (web and API)
+  - Public share links for read-only session history
+  - Per-answer feedback endpoint
+- Commercial foundation
+  - Plan limits (`free`, `pro`, `team`)
+  - Stripe checkout + portal + webhook integration
+- Developer distribution
+  - Public API key system
+  - OpenAPI + Swagger docs UI
+  - CLI workflow for ingest/status/query
+  - VS Code sidebar extension with citation navigation
+
+### Current limits and gaps
+
+- Auto-apply refactors is not implemented (suggestions only)
+- Advanced incremental/diff indexing is not implemented yet
+- Team/RBAC collaboration flows are minimal today
+
+## Core Architecture
+
+1. Ingest source files (ZIP or GitHub)
+2. Filter and chunk text/code files
+3. Generate vector embeddings
+4. Retrieve top semantic matches for a question
+5. Generate answer grounded in retrieved chunks
+6. Return citations and persist history
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15 (App Router), Tailwind CSS, Lucide React.
-- **Backend**: Next.js API Routes (Route Handlers).
-- **Database**: Supabase (PostgreSQL + pgvector).
-- **Embeddings**: Hugging Face Inference API.
-- **LLM**: Groq (Llama 3.1).
+- Frontend: Next.js 15 (App Router), React 19, Tailwind CSS
+- Backend: Next.js Route Handlers
+- Auth and DB: Supabase (Postgres + pgvector + RLS)
+- Embeddings: Hugging Face Inference API (`all-mpnet-base-v2`)
+- LLM: Groq (`llama-3.1-8b-instant`)
+- Billing: Stripe
+- Observability: PostHog
+- Editor integration: VS Code Extension API
 
-## Getting Started
+## Quick Start (Web App)
 
-1. **Clone the repository**:
-   ```bash
-   git clone <your-repo-url>
-   cd repo-lens
-   ```
+### 1. Clone and install
 
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+```bash
+git clone https://github.com/bhaktofmahakal/repo-lens.git
+cd repo-lens
+npm install
+```
 
-3. **Set up environment variables**:
-   Create a `.env.local` file by copying `.env.example` and filling in the values.
-   ```bash
-   cp .env.example .env.local
-   ```
+### 2. Configure environment
 
-4. **Initialize the database**:
-   Run the SQL provided in `schema.sql` in your Supabase SQL editor.
+Use the provided template:
 
-5. **Run the development server**:
-   ```bash
-   npm run dev
-   ```
+```bash
+cp .env.example .env.local
+```
 
-6. **Open the app**:
-   Visit `http://localhost:3000` to start exploring.
+On Windows PowerShell:
 
-## CLI (Phase 3 Scaffold)
+```powershell
+Copy-Item .env.example .env.local
+```
 
-Repo Lens now includes a local CLI scaffold for the public API workflow.
+At minimum, fill these for core local usage:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `GROQ_API_KEY`
+- `HF_TOKEN`
+- `GITHUB_TOKEN_ENCRYPTION_KEY`
 
-1. **Run the CLI help**:
-  ```bash
-  npm run cli -- help
-  ```
+Optional feature flags:
+- `NEXT_PUBLIC_ENABLE_GITHUB_LOGIN`
+- `NEXT_PUBLIC_ENABLE_GITHUB_CONNECT`
+- `NEXT_PUBLIC_ENABLE_GITHUB_AUTOSYNC`
+- `NEXT_PUBLIC_ENABLE_STRIPE_BILLING`
 
-2. **Store your API key**:
-  ```bash
-  npm run cli -- auth login --key <YOUR_API_KEY> --base-url http://localhost:3000
-  ```
+### 3. Initialize database
 
-3. **Ingest a repository**:
-  ```bash
-  npm run cli -- ingest https://github.com/vercel/next.js
-  ```
+Run [schema.sql](schema.sql) in your Supabase SQL editor.
 
-4. **Check ingestion status**:
-  ```bash
-  npm run cli -- status
-  ```
+### 4. Run the app
 
-5. **Ask a question**:
-  ```bash
-  npm run cli -- ask "Where is auth middleware defined?"
-  ```
+```bash
+npm run dev
+```
+
+Open http://localhost:3000.
+
+## Public API
+
+Interactive docs:
+- Swagger UI: `/api/docs`
+- OpenAPI JSON: `/api/docs/openapi.json`
+
+Main endpoints:
+- `POST /api/v1/repos` (ingest GitHub URL or ZIP URL)
+- `GET /api/v1/repos/{id}/status`
+- `POST /api/v1/repos/{id}/query`
+- `GET /api/v1/repos/{id}/history`
+- `DELETE /api/v1/repos/{id}`
+
+API auth format:
+- `Authorization: Bearer rpl_<token>`
+
+Example:
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/repos" \
+  -H "Authorization: Bearer rpl_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"github_url":"https://github.com/vercel/next.js"}'
+```
+
+## CLI
+
+CLI entrypoint: [src/cli/repolens.cjs](src/cli/repolens.cjs)
+
+```bash
+npm run cli -- help
+npm run cli -- auth login --key <YOUR_API_KEY> --base-url http://localhost:3000
+npm run cli -- ingest https://github.com/vercel/next.js
+npm run cli -- status
+npm run cli -- ask "Where is auth middleware defined?"
+```
 
 Notes:
-- CLI config is stored at `~/.repolens/config.json`.
-- `ingest` saves the returned repo id as your default repo.
-- Override defaults anytime with `--api-key`, `--base-url`, and `--repo`.
+- Config path: `~/.repolens/config.json`
+- `ingest` sets default repo ID automatically
+- You can override with `--api-key`, `--base-url`, `--repo`
+
+## VS Code Extension
+
+Extension folder: [vscode-extension](vscode-extension)
+
+Current features:
+- Explorer sidebar (`RepoLens`)
+- Ingest repository URL
+- Ask question against selected/default repo
+- Open citations directly to file and line in workspace
+- API key stored in VS Code SecretStorage
+
+Run extension tests:
+
+```bash
+cd vscode-extension
+npm test
+```
+
+## Optional Setup
+
+### GitHub App + Auto-Sync
+
+For private repo ingestion and webhook-based reindex:
+
+1. Configure:
+   - `GITHUB_APP_ID`
+   - `GITHUB_APP_PRIVATE_KEY`
+   - `NEXT_PUBLIC_GITHUB_APP_SLUG`
+2. Enable auto-sync:
+   - `NEXT_PUBLIC_ENABLE_GITHUB_AUTOSYNC=true`
+   - `GITHUB_WEBHOOK_SECRET=<secret>`
+3. Point GitHub webhook to:
+   - `POST /api/github/webhook`
+
+### Stripe Billing
+
+Enable paid checkout and portal:
+- `NEXT_PUBLIC_ENABLE_STRIPE_BILLING=true`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PRO_PRICE_ID`
+- `STRIPE_TEAM_PRICE_ID`
+- `STRIPE_WEBHOOK_SECRET`
+
+## Testing and Validation
+
+```bash
+npm test
+npm run build
+```
 
 ## Deployment
 
-Repo Lens is built to be deployed on Vercel or any Next.js-compatible platform. Ensure all environment variables are correctly configured in your hosting environment.
+Deploy on Vercel (or any Next.js-compatible platform) with:
+- All required environment variables
+- Supabase schema already applied
+- Optional provider keys for Stripe/GitHub features
 
-## Optional Feature Notes
+## Naming Note
 
-- Evidence search is client-side and filters current citations/snippets in the Ask screen.
-- Tags are derived from retrieved evidence (extension/folder/topic hints) and work as quick filters.
-- Refactor suggestions are generated from retrieved evidence and are citation-grounded.
+This open-source project (`repo-lens`) is independent and not affiliated with repositorylens.com.
 
-## Submission Details
+## Links
 
-- **Selected Option**: Option B
-- **Live URL**: https://repo-lens-gamma.vercel.app
-- **GitHub URL**: https://github.com/bhaktofmahakal/repo-lens
-- **AI Notes**: `AI_NOTES.md`
-- **Prompts Log**: `PROMPTS_USED.md`
-- **About Me**: `ABOUTME.md`
+- Live app: https://repo-lens-gamma.vercel.app
+- Repository: https://github.com/bhaktofmahakal/repo-lens
 
 ## Author
 
-- **Name**: Utsav Mishra
-- **Email**: utsavmishraa005@gmail.com
-- **GitHub**: https://github.com/bhaktofmahakal
-- **LinkedIn**: https://linkedin.com/utsav-mishra1
+- Name: Utsav Mishra
+- GitHub: https://github.com/bhaktofmahakal
+- LinkedIn: https://linkedin.com/utsav-mishra1
+
+## License
+
+MIT
