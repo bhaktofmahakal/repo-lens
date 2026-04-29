@@ -5,8 +5,7 @@ Repo Lens is a codebase intelligence platform that answers natural-language ques
 The project now ships in four surfaces:
 - Web app (ingest, ask, history, share, billing)
 - Public API (`/api/v1/*`)
-- CLI (`repolens`)
-- VS Code extension (`vscode-extension`)
+- CLI (`repolens`) 
 
 ## Product Status (April 2026)
 
@@ -41,7 +40,7 @@ The project now ships in four surfaces:
   - Public API key system
   - OpenAPI + Swagger docs UI
   - CLI workflow for ingest/status/query
-  - VS Code sidebar extension with citation navigation
+
 
 ### Current limits and gaps
 
