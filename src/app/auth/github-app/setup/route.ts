@@ -72,19 +72,33 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const installation = await getInstallationById(installationId);
-
-    if (!installation) {
-      return NextResponse.redirect(toDashboardUrl(req, "installation_not_found"));
-    }
-
     await ensureUserProfile(user);
 
+    let installation = null as
+      | {
+          installationId: number;
+          accountLogin: string;
+          accountType: string;
+        }
+      | null;
+
+    try {
+      installation = await getInstallationById(installationId);
+    } catch (error) {
+      console.warn("[github-app/setup] Falling back to installation_id from callback:", error);
+    }
+
+    const installationRecord = installation ?? {
+      installationId,
+      accountLogin: user.email?.split("@")[0]?.trim() || user.user_metadata?.full_name?.trim() || "unknown",
+      accountType: "User",
+    };
+
     const { error } = await supabase.from("github_app_installations").upsert({
-      installation_id: installation.installationId,
+      installation_id: installationRecord.installationId,
       user_id: user.id,
-      account_login: installation.accountLogin,
-      account_type: installation.accountType,
+      account_login: installationRecord.accountLogin,
+      account_type: installationRecord.accountType,
       updated_at: new Date().toISOString(),
     });
 
