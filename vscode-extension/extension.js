@@ -10,6 +10,14 @@ function getConfig() {
   return vscode.workspace.getConfiguration("repolens");
 }
 
+function getGuestMode() {
+  return Boolean(getConfig().get("guestMode", false));
+}
+
+async function setGuestMode(value) {
+  await getConfig().update("guestMode", Boolean(value), vscode.ConfigurationTarget.Global);
+}
+
 function getBaseUrl() {
   return String(getConfig().get("baseUrl", "")).trim().replace(/\/$/, "");
 }
@@ -44,6 +52,7 @@ async function setDefaultRepoId(value) {
 
 async function getApiKey(context, promptIfMissing = true) {
   const existing = await context.secrets.get(EXTENSION_SECRET_API_KEY);
+  if (getGuestMode()) return null;
   if (existing) return existing;
   if (!promptIfMissing) return null;
 
@@ -206,8 +215,9 @@ async function requestJson({ baseUrl, route, method = "GET", apiKey, body }) {
 async function ingestRepoByUrl(context, sourceUrl) {
   const baseUrl = getValidatedBaseUrl();
   const apiKey = await getApiKey(context, true);
-  if (!apiKey) {
-    throw new Error("RepoLens API key is required.");
+  if (!apiKey && !getGuestMode()) {
+    // If guest mode isn't enabled, require API key
+    throw new Error("RepoLens API key is required. Or enable Guest Mode from the extension commands.");
   }
 
   const normalizedUrl = String(sourceUrl || "").trim();
@@ -238,8 +248,8 @@ async function askRepoQuestion(context, repoId, question) {
   const baseUrl = getValidatedBaseUrl();
 
   const apiKey = await getApiKey(context, true);
-  if (!apiKey) {
-    throw new Error("RepoLens API key is required.");
+  if (!apiKey && !getGuestMode()) {
+    throw new Error("RepoLens API key is required. Or enable Guest Mode from the extension commands.");
   }
 
   return requestJson({
@@ -707,6 +717,29 @@ function activate(context) {
     vscode.commands.registerCommand("repolens.askQuestion", () => askQuestion(context)),
     vscode.commands.registerCommand("repolens.ingestRepo", () => ingestRepo(context, sidebarProvider)),
     vscode.commands.registerCommand("repolens.refreshSidebar", () => sidebarProvider.refresh()),
+    vscode.commands.registerCommand("repolens.enableGuestMode", async () => {
+      const enabled = getGuestMode();
+      const choice = await vscode.window.showInformationMessage(
+        enabled ? "Disable Guest Mode?" : "Enable Guest Mode (allow anonymous queries)?",
+        { modal: true },
+        enabled ? "Disable" : "Enable",
+      );
+      if (choice) {
+        await setGuestMode(!enabled);
+        vscode.window.showInformationMessage(`Guest Mode ${enabled ? "disabled" : "enabled"}.`);
+        await sidebarProvider.refresh();
+      }
+    }),
+    vscode.commands.registerCommand("repolens.showOnboarding", async () => {
+      const panel = vscode.window.createWebviewPanel("repolensOnboard", "RepoLens Onboarding", vscode.ViewColumn.One, { enableScripts: true });
+      panel.webview.html = `<!doctype html><html><body style="font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; padding:20px;"><h1>RepoLens Quick Start</h1><ol><li>Set <b>repolens.baseUrl</b> in Settings to your deployment (e.g. https://repo-lens-gamma.vercel.app)</li><li>Run command: <b>RepoLens: Set API Key</b> (or enable Guest Mode)</li><li>Set default repo via <b>RepoLens: Set Default Repo ID</b> or ingest a repo</li><li>Use <b>RepoLens: Ask a Question</b> to query your repo.</li></ol><p><button onclick="acquireVsCodeApi().postMessage({ type: 'enableGuest' })">Enable Guest Mode</button></p></body></html>`;
+      panel.webview.onDidReceiveMessage(async (m) => {
+        if (m && m.type === "enableGuest") {
+          await setGuestMode(true);
+          vscode.window.showInformationMessage("Guest Mode enabled.");
+        }
+      });
+    }),
     vscode.commands.registerCommand("repolens.openCitation", openCitation),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("repolens")) {

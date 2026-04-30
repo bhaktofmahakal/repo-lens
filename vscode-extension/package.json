@@ -51,6 +51,14 @@
       {
         "command": "repolens.setRepoId",
         "title": "RepoLens: Set Default Repo ID"
+      },
+      {
+        "command": "repolens.enableGuestMode",
+        "title": "RepoLens: Enable Guest Mode (no account)"
+      },
+      {
+        "command": "repolens.showOnboarding",
+        "title": "RepoLens: Show Onboarding"
       }
     ],
     "views": {
@@ -82,6 +90,12 @@
           "type": "string",
           "default": "",
           "description": "Default RepoLens repository ID for query commands."
+        }
+      ,
+        "repolens.guestMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow using RepoLens without signing in by enabling guest mode (anonymous queries)."
         }
       }
     }
