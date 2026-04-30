@@ -245,7 +245,14 @@ export async function POST(req: NextRequest) {
     
     // Check if this is a timeout/504 issue
     const errorMsg = error instanceof Error ? error.message : String(error);
-    if (errorMsg.includes("time") || errorMsg.includes("timeout") || errorMsg.includes("AbortError")) {
+    const errorName = error instanceof Error ? error.name : "";
+    const isTimeout =
+      errorMsg.includes("time") ||
+      errorMsg.includes("timeout") ||
+      errorMsg.includes("AbortError") ||
+      errorName === "AbortError" ||
+      errorName === "TimeoutError";
+    if (isTimeout) {
       return NextResponse.json(
         {
           error: "Repository ingestion timed out. Try again or use the API with a longer timeout.",
