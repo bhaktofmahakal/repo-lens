@@ -1,5 +1,5 @@
 {
-  "name": "repolens-vscode",
+  "name": "repolens-vscode-extension",
   "displayName": "RepoLens",
   "description": "Ask questions about your repository with citation-backed answers from RepoLens.",
   "version": "0.0.3",
