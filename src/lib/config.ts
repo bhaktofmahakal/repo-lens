@@ -6,6 +6,10 @@ function parseIntegerEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseIntegerEnvAtLeast(name: string, fallback: number): number {
+  return Math.max(parseIntegerEnv(name, fallback), fallback);
+}
+
 export function isConfiguredEnvValue(value?: string): boolean {
   if (!value) return false;
   const normalized = value.trim().toLowerCase();
@@ -13,8 +17,8 @@ export function isConfiguredEnvValue(value?: string): boolean {
 }
 
 export const config = {
-  maxZipSizeMb: parseIntegerEnv("MAX_ZIP_SIZE_MB", 25),
-  maxTotalFiles: parseIntegerEnv("MAX_TOTAL_FILES", 1000),
+  maxZipSizeMb: parseIntegerEnvAtLeast("MAX_ZIP_SIZE_MB", 45),
+  maxTotalFiles: parseIntegerEnvAtLeast("MAX_TOTAL_FILES", 2000),
   maxTotalChars: parseIntegerEnv("MAX_TOTAL_CHARS", 4_000_000),
   maxFileChars: parseIntegerEnv("MAX_FILE_CHARS", 200_000),
   githubFetchConcurrency: parseIntegerEnv("GITHUB_FETCH_CONCURRENCY", 6),

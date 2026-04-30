@@ -1,5 +1,5 @@
 export const PLAN_LIMITS = {
-  free: { repos_per_month: 3, queries_per_month: 50, max_repo_size_mb: 25, private_repos: false },
+  free: { repos_per_month: 3, queries_per_month: 50, max_repo_size_mb: 45, private_repos: false },
   pro: { repos_per_month: 25, queries_per_month: 500, max_repo_size_mb: 200, private_repos: true },
   team: {
     repos_per_month: Number.POSITIVE_INFINITY,

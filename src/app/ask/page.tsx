@@ -297,7 +297,7 @@ function IngestDashboard() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-white">Upload ZIP</h3>
-                    <p className="text-xs text-[#7d7d87]">Max 25 MB</p>
+                    <p className="text-xs text-[#7d7d87]">Max 45 MB</p>
                   </div>
                 </div>
                 <form onSubmit={handleZipUpload} className="space-y-4">
@@ -329,7 +329,7 @@ function IngestDashboard() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-white">GitHub Repo</h3>
-                    <p className="text-xs text-[#7d7d87]">Public repos · Max 1 000 files</p>
+                    <p className="text-xs text-[#7d7d87]">Public repos · Max 2 000 files</p>
                   </div>
                 </div>
                 <form onSubmit={handleGithubIngest} className="space-y-4">

@@ -73,7 +73,7 @@ function LLMSvg() {
 function HowItWorks() {
   const reduce = useReducedMotion();
   const steps = [
-    { n: "01", title: "Ingest", desc: "Upload a ZIP (≤25 MB) or paste a public GitHub URL. Repo Lens indexes text and code files, skipping binaries automatically." },
+    { n: "01", title: "Ingest", desc: "Upload a ZIP (≤45 MB) or paste a public GitHub URL. Repo Lens indexes text and code files, skipping binaries automatically." },
     { n: "02", title: "Embed", desc: "Files are chunked into 60-line windows, vectorized with all-mpnet-base-v2, and stored in Supabase pgvector." },
     { n: "03", title: "Ask", desc: "Type a natural-language question. The nearest chunks are retrieved and fed to Groq Llama 3.1 to generate a grounded answer." },
     { n: "04", title: "Verify", desc: "Every answer arrives with file-path and line-range citations you can click through to the original source." },
