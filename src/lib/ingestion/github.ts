@@ -13,7 +13,7 @@ import { embedTexts } from "@/lib/embeddings/hf";
 import { IngestResult } from "@/types";
 
 const CHUNK_INSERT_BATCH_SIZE = 250;
-const GITHUB_INGEST_TIME_BUDGET_MS = 240_000; // 4 minutes for safe ingestion
+const GITHUB_INGEST_TIME_BUDGET_MS = 45_000;
 
 async function fetchTextWithTimeout(url: string, timeoutMs: number, githubToken?: string): Promise<string | null> {
   const controller = new AbortController();

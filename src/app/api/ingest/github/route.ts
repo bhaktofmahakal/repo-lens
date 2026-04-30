@@ -20,7 +20,7 @@ import {
 } from "@/lib/github-app";
 import { decryptGithubToken } from "@/lib/github-token-crypto";
 
-export const maxDuration = 300; // 5 minutes for large repo ingestion
+export const maxDuration = 60;
 
 const githubUrlSchema = z
   .string()
@@ -237,24 +237,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.error(`[${requestId}] Ingest GitHub Error:`, error);
-    
-    // Check if this is a timeout/504 issue
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    if (errorMsg.includes("time") || errorMsg.includes("timeout") || errorMsg.includes("AbortError")) {
-      return NextResponse.json(
-        {
-          error: "Repository ingestion timed out. Try again or use the API with a longer timeout.",
-          code: "INGEST_TIMEOUT",
-          requestId,
-        },
-        { status: 504 },
-      );
-    }
-    
+    console.error(`[${requestId}] Ingest GitHub Error`);
     return NextResponse.json(
       {
-        error: "Failed to ingest GitHub repo. Check repo accessibility and size limits.",
+        error: "Failed to ingest GitHub repo",
         code: "INTERNAL_SERVER_ERROR",
         requestId,
       },
