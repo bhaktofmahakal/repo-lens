@@ -9,17 +9,11 @@ The project now ships in four surfaces:
 
 ## Product Status (April 2026)
 
-### Implemented
+### Core Implemented
 
-- ZIP and GitHub repository ingestion
+- ZIP and public GitHub repository ingestion
   - Web UI upload for local `.zip`
   - API ingestion for GitHub URL or remote ZIP URL
-- Private GitHub repository support for paid plans via:
-  - GitHub OAuth token connect
-  - GitHub App installation token (recommended)
-- GitHub push auto-sync pipeline
-  - Webhook endpoint receives push events
-  - Matching indexed repos are re-ingested into fresh chunks
 - Retrieval and answer pipeline
   - File chunking with overlap
   - 768-dim embeddings via Hugging Face
@@ -31,22 +25,21 @@ The project now ships in four surfaces:
   - Evidence filtering and quick tags
 - Session features
   - Q&A history (web and API)
-  - Public share links for read-only session history
   - Per-answer feedback endpoint
-- Commercial foundation
-  - Plan limits (`free`, `pro`, `team`)
-  - Stripe checkout + portal + webhook integration
 - Developer distribution
   - Public API key system
   - OpenAPI + Swagger docs UI
   - CLI workflow for ingest/status/query
 
+### Partially Implemented / Planned
 
-### Current limits and gaps
+- Private GitHub repository support (planned / gated by billing)
+- GitHub push auto-sync (webhook + app installation flow planned)
+- Advanced incremental/diff indexing (planned)
+- Full Stripe billing workflows (partial/experimental)
+- Team/RBAC collaboration flows (planned)
 
-- Auto-apply refactors is not implemented (suggestions only)
-- Advanced incremental/diff indexing is not implemented yet
-- Team/RBAC collaboration flows are minimal today
+Notes: The README intentionally focuses on the core, working surfaces. Some integrations and "coming soon" features are listed under "Partially Implemented / Planned" so the project doesn't overstate current capabilities.
 
 ## Core Architecture
 
@@ -80,7 +73,7 @@ npm install
 
 ### 2. Configure environment
 
-Use the provided template:
+Use the provided template and keep secrets local only. Create a local `.env.local` from the example and fill only the values you need for local development.
 
 ```bash
 cp .env.example .env.local
@@ -92,19 +85,14 @@ On Windows PowerShell:
 Copy-Item .env.example .env.local
 ```
 
-At minimum, fill these for core local usage:
+At minimum, fill these for core local usage (do NOT commit `.env.local`):
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `GROQ_API_KEY`
-- `HF_TOKEN`
-- `GITHUB_TOKEN_ENCRYPTION_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only)
+- `GROQ_API_KEY` (server-only)
+- `HF_TOKEN` (server-only)
 
-Optional feature flags:
-- `NEXT_PUBLIC_ENABLE_GITHUB_LOGIN`
-- `NEXT_PUBLIC_ENABLE_GITHUB_CONNECT`
-- `NEXT_PUBLIC_ENABLE_GITHUB_AUTOSYNC`
-- `NEXT_PUBLIC_ENABLE_STRIPE_BILLING`
+Feature flags can be toggled locally via `.env.local`. Never commit real secret values to the repository; `.env.local` is listed in `.gitignore`.
 
 ### 3. Initialize database
 

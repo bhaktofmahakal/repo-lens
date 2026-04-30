@@ -328,7 +328,7 @@ export default function Home() {
             { heading: "Community", links: [
               { label: "GitHub Repo", href: "https://github.com/bhaktofmahakal/repo-lens", external: true },
               { label: "Report Issue", href: "https://github.com/bhaktofmahakal/repo-lens/issues", external: true },
-              { label: "Twitter / X", href: "https://x.com/bhaktofmahakal", external: true },
+              { label: "Twitter / X", href: "https://x.com/Utsav_mishraa", external: true },
             ]},
             { heading: "Legal", links: [
               { label: "Privacy Policy", href: "#" },
