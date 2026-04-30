@@ -32,4 +32,10 @@ build
 # local scratch artifacts
 .tmp-tests
 
+# internal/private files
+.agents/
+Repolens-prd.md
+skills-lock.json
+VIDEO_*.md
+
 .vercel
