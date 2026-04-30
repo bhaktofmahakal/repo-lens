@@ -7,6 +7,7 @@ import {
   isGithubAutoSyncConfigured,
   summarizePushPayload,
 } from "@/lib/github-autosync";
+import { supabase } from "@/lib/db";
 
 export const maxDuration = 60;
 
@@ -76,6 +77,41 @@ export async function POST(req: NextRequest) {
 
   if (eventType === "ping") {
     return NextResponse.json({ received: true, event: "ping" });
+  }
+
+  // Handle installation.created events so we persist GitHub App installations
+  if (eventType === "installation") {
+    // payload should include { action: 'created', installation: { id, account: { login, type } } }
+    try {
+      const evt = payload as any;
+      const action = evt.action;
+      if (action === "created" && evt.installation && evt.installation.id) {
+        const installationId = Number(evt.installation.id);
+        const accountLogin = evt.installation.account?.login || null;
+        const accountType = evt.installation.account?.type || null;
+
+        const { error } = await supabase.from("github_app_installations").upsert(
+          {
+            installation_id: installationId,
+            user_id: null,
+            account_login: accountLogin,
+            account_type: accountType,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "installation_id" },
+        );
+
+        if (error) {
+          console.warn("[github-webhook] failed to upsert installation record:", error.message);
+          return NextResponse.json({ received: true, error: "INSTALLATION_UPSERT_FAILED" }, { status: 500 });
+        }
+
+        return NextResponse.json({ received: true, event: eventType, installationId });
+      }
+    } catch (err) {
+      console.warn("[github-webhook] installation event handling error:", err);
+      return NextResponse.json({ received: true, ignored: true, event: eventType });
+    }
   }
 
   if (eventType !== "push") {
