@@ -10,9 +10,9 @@ import { capturePosthogEvent } from "@/lib/posthog";
 import {
   checkPrivateRepoAllowed,
   checkRepoLimit,
-  checkRepoSize,
   LimitExceededError,
 } from "@/lib/check-limits";
+import { PLAN_LIMITS } from "@/lib/plan-limits";
 import {
   getInstallationAccessToken,
   getRepoInstallation,
@@ -144,8 +144,6 @@ export async function POST(req: NextRequest) {
       throw error;
     }
 
-    checkRepoSize((repoMeta.size || 0) * 1024, plan);
-
     if (repoMeta.private) {
       checkPrivateRepoAllowed(plan);
       if (!githubToken) {
@@ -185,7 +183,7 @@ export async function POST(req: NextRequest) {
         })
       : await ingestGitHub(validatedUrl, sourceId, {
           githubToken,
-          maxRepoSizeMb: Number.POSITIVE_INFINITY,
+          maxRepoSizeMb: PLAN_LIMITS[plan].max_repo_size_mb,
           userId: auth.user.id,
         });
 
