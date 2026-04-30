@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { GitHubConnectionCard } from "./GitHubConnectionCard";
 import { isGithubAppConfigured } from "@/lib/github-app";
 
-type GithubSource = {
+type Source = {
   id: string;
   name: string;
+  type: string;
   github_url: string | null;
   created_at: string;
 };
@@ -28,9 +29,19 @@ type GithubAppInstallation = {
 
 type DashboardPageProps = {
   searchParams: Promise<{
+    github?: string;
     github_app?: string;
   }>;
 };
+
+function githubOAuthStatusMessage(status: string | undefined): string | null {
+  if (!status) return null;
+  if (status === "connected") return "GitHub OAuth connected successfully.";
+  if (status === "error") {
+    return "GitHub OAuth did not connect. Check provider setup and token encryption config.";
+  }
+  return null;
+}
 
 function githubAppStatusMessage(status: string | undefined): string | null {
   if (!status) return null;
@@ -38,14 +49,18 @@ function githubAppStatusMessage(status: string | undefined): string | null {
   if (status === "config_error" || status === "unavailable") {
     return "GitHub App setup is currently unavailable. Please try again later.";
   }
-  if (status === "missing_installation")
+  if (status === "missing_installation") {
     return "GitHub did not return installation details. Please try again.";
-  if (status === "installation_not_found")
+  }
+  if (status === "installation_not_found") {
     return "GitHub App installation could not be verified. Please try again.";
-  if (status === "save_failed")
+  }
+  if (status === "save_failed") {
     return "GitHub App was installed, but linking it to your account failed. Please retry.";
-  if (status === "error")
+  }
+  if (status === "error") {
     return "GitHub App setup did not complete. Please try again.";
+  }
   return null;
 }
 
@@ -64,22 +79,18 @@ function statusBadgeClass(status: SyncJob["status"] | "never"): string {
 
 function statusLabel(job?: SyncJob): string {
   if (!job) return "Not synced yet";
-  if (job.status === "processing")
-    return `Sync in progress (${job.progress_pct}%)`;
+  if (job.status === "processing") return `Sync in progress (${job.progress_pct}%)`;
   if (job.status === "pending") return "Queued";
   if (job.status === "failed") return "Failed";
   return "Synced";
 }
 
-export default async function DashboardPage({
-  searchParams,
-}: DashboardPageProps) {
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = await searchParams;
-  const githubConnectEnabled =
-    process.env.NEXT_PUBLIC_ENABLE_GITHUB_CONNECT === "true";
-  const githubAutoSyncEnabled =
-    process.env.NEXT_PUBLIC_ENABLE_GITHUB_AUTOSYNC === "true";
+  const githubConnectEnabled = process.env.NEXT_PUBLIC_ENABLE_GITHUB_CONNECT === "true";
+  const githubAutoSyncEnabled = process.env.NEXT_PUBLIC_ENABLE_GITHUB_AUTOSYNC === "true";
   const githubAppConfigured = isGithubAppConfigured();
+  const githubOAuthSetupMessage = githubOAuthStatusMessage(params.github);
   const githubAppSetupMessage = githubAppStatusMessage(params.github_app);
 
   const supabase = await createClient();
@@ -87,8 +98,9 @@ export default async function DashboardPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let githubSources: GithubSource[] = [];
+  let sources: Source[] = [];
   let githubAppInstallations: GithubAppInstallation[] = [];
+  let sourceStatusError: string | null = null;
   let syncStatusError: string | null = null;
   let githubAppStatusError: string | null = null;
   const latestSyncJobBySource = new Map<string, SyncJob>();
@@ -96,16 +108,15 @@ export default async function DashboardPage({
   if (user) {
     const { data: sourceRows, error: sourceError } = await supabase
       .from("sources")
-      .select("id, name, github_url, created_at")
+      .select("id, name, type, github_url, created_at")
       .eq("user_id", user.id)
-      .eq("type", "github")
       .order("created_at", { ascending: false })
       .limit(8);
 
     if (sourceError) {
-      syncStatusError = "Unable to load GitHub source list.";
+      sourceStatusError = "Unable to load repository list.";
     } else {
-      githubSources = (sourceRows as GithubSource[]) || [];
+      sources = (sourceRows as Source[]) || [];
     }
 
     const { data: installationRows, error: installationError } = await supabase
@@ -118,31 +129,35 @@ export default async function DashboardPage({
     if (installationError) {
       githubAppStatusError = "Unable to load GitHub App installation status.";
     } else {
-      githubAppInstallations =
-        (installationRows as GithubAppInstallation[]) || [];
+      githubAppInstallations = (installationRows as GithubAppInstallation[]) || [];
     }
 
-    const { data: syncRows, error: syncError } = await supabase
-      .from("sync_jobs")
-      .select(
-        "source_id, status, progress_pct, updated_at, completed_at, error_msg",
-      )
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(100);
+    const githubSourceIds = sources
+      .filter((source) => source.type === "github")
+      .map((source) => source.id);
 
-    if (syncError) {
-      syncStatusError = syncStatusError
-        ? `${syncStatusError} Auto-sync history is unavailable.`
-        : "Auto-sync history is unavailable right now.";
-    } else {
-      for (const row of (syncRows as SyncJob[]) || []) {
-        if (!latestSyncJobBySource.has(row.source_id)) {
-          latestSyncJobBySource.set(row.source_id, row);
+    if (githubAutoSyncEnabled && githubSourceIds.length > 0) {
+      const { data: syncRows, error: syncError } = await supabase
+        .from("sync_jobs")
+        .select("source_id, status, progress_pct, updated_at, completed_at, error_msg")
+        .eq("user_id", user.id)
+        .in("source_id", githubSourceIds)
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (syncError) {
+        syncStatusError = "Auto-sync history is unavailable right now.";
+      } else {
+        for (const row of (syncRows as SyncJob[]) || []) {
+          if (!latestSyncJobBySource.has(row.source_id)) {
+            latestSyncJobBySource.set(row.source_id, row);
+          }
         }
       }
     }
   }
+
+  const latestSource = sources[0];
 
   return (
     <section className="space-y-6">
@@ -152,6 +167,18 @@ export default async function DashboardPage({
           Manage your workspace, billing, and ingestion sources.
         </p>
       </div>
+
+      {githubOAuthSetupMessage ? (
+        <p
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            params.github === "connected"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+              : "border-red-500/30 bg-red-500/10 text-red-200"
+          }`}
+        >
+          {githubOAuthSetupMessage}
+        </p>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Link
@@ -164,22 +191,14 @@ export default async function DashboardPage({
           </p>
         </Link>
         <Link
-          href={
-            githubSources.length > 0
-              ? `/history?sourceId=${githubSources[0].id}`
-              : "/ask"
-          }
-          className={`rounded-xl border p-5 transition-colors ${
-            githubSources.length > 0
-              ? "border-white/10 bg-[#111111] hover:border-[#F04D26]/50"
-              : "border-white/10 bg-[#111111]/50 cursor-not-allowed opacity-50"
-          }`}
+          href={latestSource ? `/history?sourceId=${latestSource.id}` : "/ask"}
+          className="rounded-xl border border-white/10 bg-[#111111] p-5 transition-colors hover:border-[#F04D26]/50"
         >
           <h2 className="text-lg font-semibold">History</h2>
           <p className="mt-2 text-sm text-white/60">
-            {githubSources.length > 0
+            {latestSource
               ? "Review previous questions and answers."
-              : "Ingest a repo first to view history."}
+              : "Import a repository to create history."}
           </p>
         </Link>
         <Link
@@ -197,38 +216,123 @@ export default async function DashboardPage({
         <GitHubConnectionCard />
       ) : (
         <article className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
-          <h2 className="text-lg font-semibold">GitHub Private Repo Connect</h2>
+          <h2 className="text-lg font-semibold">GitHub OAuth Connection</h2>
           <p className="mt-2 text-sm text-amber-100/80">
-            Private repository connection coming in Phase 1. For now, public
-            GitHub repos work perfectly.
+            GitHub OAuth connection is disabled in this environment. Public GitHub
+            repositories and ZIP uploads can still be imported.
           </p>
         </article>
       )}
 
-      {/* GitHub App & Auto-sync info */}
-      <article className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
+      <article className="rounded-xl border border-white/10 bg-[#111111] p-5">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">GitHub App (Coming Phase 2)</h2>
-          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
-            Planned
+          <h2 className="text-lg font-semibold">Recent Sources</h2>
+          <Link
+            href="/ask"
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-white/80 hover:bg-white/5"
+          >
+            Import
+          </Link>
+        </div>
+
+        {sourceStatusError ? (
+          <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {sourceStatusError}
+          </p>
+        ) : sources.length > 0 ? (
+          <div className="mt-4 divide-y divide-white/10">
+            {sources.map((source) => {
+              const syncJob = latestSyncJobBySource.get(source.id);
+              const showSync = githubAutoSyncEnabled && source.type === "github";
+
+              return (
+                <div
+                  key={source.id}
+                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-white">{source.name}</p>
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs uppercase tracking-wide text-white/55">
+                        {source.type}
+                      </span>
+                      {showSync ? (
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-xs ${statusBadgeClass(
+                            syncJob?.status || "never",
+                          )}`}
+                        >
+                          {statusLabel(syncJob)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-white/45">
+                      Added {new Date(source.created_at).toLocaleString()}
+                    </p>
+                    {syncJob?.status === "failed" && syncJob.error_msg ? (
+                      <p className="mt-1 text-xs text-red-300">{syncJob.error_msg}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/ask?sourceId=${source.id}`}
+                      className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-white/80 hover:bg-white/5"
+                    >
+                      Ask
+                    </Link>
+                    <Link
+                      href={`/history?sourceId=${source.id}`}
+                      className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-white/80 hover:bg-white/5"
+                    >
+                      History
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-white/60">
+            No repositories indexed yet. Import a ZIP or GitHub repository to start asking
+            questions.
+          </p>
+        )}
+
+        {syncStatusError ? (
+          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            {syncStatusError}
+          </p>
+        ) : null}
+      </article>
+
+      <article className="rounded-xl border border-white/10 bg-[#111111] p-5">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">GitHub App Auto-sync</h2>
+          <span
+            className={`rounded-full border px-2.5 py-1 text-xs ${
+              githubAutoSyncEnabled && githubAppConfigured
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+            }`}
+          >
+            {githubAutoSyncEnabled && githubAppConfigured
+              ? "Ready"
+              : githubAppConfigured
+                ? "Configured"
+                : "Setup required"}
           </span>
         </div>
 
-        <p className="mt-2 text-sm text-amber-100/80">
-          Automatic syncing on git push is coming in Phase 2. This will keep
-          your indexed code up-to-date with the latest commits.
+        <p className="mt-2 text-sm text-white/60">
+          {githubAutoSyncEnabled
+            ? "Install the GitHub App to keep indexed GitHub repositories up to date from push webhooks."
+            : "Automatic GitHub syncing is disabled in this environment."}
         </p>
 
         <div className="mt-4">
           {githubAppConfigured ? (
             <a
-              href={
-                process.env.NEXT_PUBLIC_GITHUB_APP_SLUG
-                  ? `https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG}`
-                  : "#"
-              }
-              target="_blank"
-              rel="noreferrer"
+              href="/api/github/app/install"
               className="rounded-lg bg-emerald-600/10 px-4 py-2 text-sm font-medium text-emerald-200"
             >
               Install GitHub App
@@ -244,6 +348,24 @@ export default async function DashboardPage({
           )}
         </div>
 
+        {githubAppSetupMessage ? (
+          <p
+            className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+              params.github_app === "connected"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                : "border-red-500/30 bg-red-500/10 text-red-200"
+            }`}
+          >
+            {githubAppSetupMessage}
+          </p>
+        ) : null}
+
+        {githubAppStatusError ? (
+          <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            {githubAppStatusError}
+          </p>
+        ) : null}
+
         {githubAppInstallations.length > 0 ? (
           <div className="mt-4 space-y-2">
             {githubAppInstallations.map((installation) => (
@@ -255,7 +377,7 @@ export default async function DashboardPage({
                   {installation.account_login} ({installation.account_type})
                 </p>
                 <p className="mt-1 text-xs text-white/55">
-                  Installation ID: {installation.installation_id} · Updated:{" "}
+                  Installation ID: {installation.installation_id} - Updated:{" "}
                   {new Date(installation.updated_at).toLocaleString()}
                 </p>
               </div>

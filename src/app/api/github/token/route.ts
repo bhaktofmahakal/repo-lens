@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRequestAuth } from "@/lib/auth-guard";
+import { isGithubTokenEncryptionConfigured } from "@/lib/github-token-crypto";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(req: NextRequest) {
@@ -7,6 +8,8 @@ export async function GET(req: NextRequest) {
     const auth = await requireRequestAuth(req);
     if ("response" in auth) return auth.response;
 
+    const connectEnabled = process.env.NEXT_PUBLIC_ENABLE_GITHUB_CONNECT === "true";
+    const tokenStorageConfigured = isGithubTokenEncryptionConfigured();
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("github_tokens")
@@ -21,7 +24,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ connected: Boolean(data) });
+    return NextResponse.json({
+      connected: Boolean(data),
+      connectAvailable: connectEnabled && tokenStorageConfigured,
+      unavailableReason: !connectEnabled
+        ? "GitHub OAuth connection is disabled for this environment."
+        : !tokenStorageConfigured
+          ? "GitHub OAuth connection is not configured yet."
+          : null,
+    });
   } catch {
     return NextResponse.json(
       { error: "Failed to load GitHub connection.", code: "INTERNAL_SERVER_ERROR" },

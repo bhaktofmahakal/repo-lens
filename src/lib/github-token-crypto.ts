@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+import { isConfiguredEnvValue } from "@/lib/config";
 
 const IV_BYTES = 12;
 
@@ -15,6 +16,10 @@ function getEncryptionKey(): Buffer {
   }
 
   return createHash("sha256").update(secret).digest();
+}
+
+export function isGithubTokenEncryptionConfigured(): boolean {
+  return isConfiguredEnvValue(process.env.GITHUB_TOKEN_ENCRYPTION_KEY);
 }
 
 function parsePayload(payload: string): TokenParts {
