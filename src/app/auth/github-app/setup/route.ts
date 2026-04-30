@@ -3,6 +3,43 @@ import { createClient } from "@/lib/supabase/server";
 import { getInstallationById, isGithubAppConfigured } from "@/lib/github-app";
 import { supabase } from "@/lib/db";
 
+type OAuthUserMetadata = {
+  full_name?: string;
+  name?: string;
+  email?: string;
+};
+
+function buildProfileName(userId: string, email: string | null, metadata: OAuthUserMetadata): string {
+  const fromMetadata = metadata.full_name?.trim() || metadata.name?.trim();
+  if (fromMetadata) return fromMetadata;
+
+  if (email) {
+    const localPart = email.split("@")[0]?.trim();
+    if (localPart) return localPart;
+  }
+
+  return `user-${userId.slice(0, 8)}`;
+}
+
+async function ensureUserProfile(user: { id: string; email?: string | null; user_metadata?: OAuthUserMetadata }) {
+  const email = user.email?.trim() || user.user_metadata?.email?.trim() || `${user.id}@oauth.local`;
+  const name = buildProfileName(user.id, user.email ?? user.user_metadata?.email ?? null, user.user_metadata ?? {});
+
+  const { error } = await supabase.from("users").upsert(
+    {
+      id: user.id,
+      email,
+      name,
+      password_hash: "",
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    throw new Error(`Failed to ensure user profile: ${error.message}`);
+  }
+}
+
 function toDashboardUrl(req: NextRequest, status: string): URL {
   return new URL(`/dashboard?github_app=${encodeURIComponent(status)}`, req.nextUrl.origin);
 }
@@ -40,6 +77,8 @@ export async function GET(req: NextRequest) {
     if (!installation) {
       return NextResponse.redirect(toDashboardUrl(req, "installation_not_found"));
     }
+
+    await ensureUserProfile(user);
 
     const { error } = await supabase.from("github_app_installations").upsert({
       installation_id: installation.installationId,
