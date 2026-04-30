@@ -119,10 +119,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       sources = (sourceRows as Source[]) || [];
     }
 
+    // Load installations belonging to this user, and also show unlinked installations
     const { data: installationRows, error: installationError } = await supabase
       .from("github_app_installations")
-      .select("installation_id, account_login, account_type, updated_at")
-      .eq("user_id", user.id)
+      .select("installation_id, user_id, account_login, account_type, updated_at")
+      .or(`user_id.eq.${user.id},user_id.is.null`)
       .order("updated_at", { ascending: false })
       .limit(5);
 
@@ -373,13 +374,27 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 key={installation.installation_id}
                 className="rounded-lg border border-white/10 bg-[#151515] px-3 py-2"
               >
-                <p className="text-sm font-medium text-white">
-                  {installation.account_login} ({installation.account_type})
-                </p>
-                <p className="mt-1 text-xs text-white/55">
-                  Installation ID: {installation.installation_id} - Updated:{" "}
-                  {new Date(installation.updated_at).toLocaleString()}
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      {installation.account_login} ({installation.account_type})
+                    </p>
+                    <p className="mt-1 text-xs text-white/55">
+                      Installation ID: {installation.installation_id} - Updated: {" "}
+                      {new Date(installation.updated_at).toLocaleString()}
+                    </p>
+                  </div>
+                  {installation.user_id ? (
+                    <span className="text-xs text-white/60">Linked</span>
+                  ) : (
+                    <a
+                      href={`/auth/github-app/setup?installation_id=${installation.installation_id}`}
+                      className="rounded-lg border border-white/10 px-2 py-1 text-xs text-white/80 hover:bg-white/5"
+                    >
+                      Link to my account
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>
