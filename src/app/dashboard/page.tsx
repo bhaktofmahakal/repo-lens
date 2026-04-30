@@ -150,11 +150,17 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <p className="mt-2 text-sm text-white/60">Open the Q&A experience for your indexed repositories.</p>
         </Link>
         <Link
-          href="/history"
-          className="rounded-xl border border-white/10 bg-[#111111] p-5 transition-colors hover:border-[#F04D26]/50"
+          href={githubSources.length > 0 ? `/history?sourceId=${githubSources[0].id}` : "/ask"}
+          className={`rounded-xl border p-5 transition-colors ${
+            githubSources.length > 0
+              ? "border-white/10 bg-[#111111] hover:border-[#F04D26]/50"
+              : "border-white/10 bg-[#111111]/50 cursor-not-allowed opacity-50"
+          }`}
         >
           <h2 className="text-lg font-semibold">History</h2>
-          <p className="mt-2 text-sm text-white/60">Review previous questions and answers.</p>
+          <p className="mt-2 text-sm text-white/60">
+            {githubSources.length > 0 ? "Review previous questions and answers." : "Ingest a repo first to view history."}
+          </p>
         </Link>
         <Link
           href="/dashboard/billing"
@@ -168,50 +174,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       {githubConnectEnabled ? (
         <GitHubConnectionCard />
       ) : (
-        <article className="rounded-xl border border-white/10 bg-[#111111] p-5">
+        <article className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
           <h2 className="text-lg font-semibold">GitHub Private Repo Connect</h2>
-          <p className="mt-2 text-sm text-white/60">
-            Private repository connection is currently unavailable. Public GitHub ingest still works.
+          <p className="mt-2 text-sm text-amber-100/80">
+            Private repository connection coming in Phase 1. For now, public GitHub repos work perfectly.
           </p>
         </article>
       )}
 
-      <article className="rounded-xl border border-white/10 bg-[#111111] p-5">
+      <article className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">GitHub App (Recommended)</h2>
-          <span
-            className={`rounded-full border px-2.5 py-1 text-xs ${
-              githubAppInstallations.length > 0
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                : "border-white/15 bg-white/5 text-white/65"
-            }`}
-          >
-            {githubAppInstallations.length > 0 ? "Installed" : "Not installed"}
+          <h2 className="text-lg font-semibold">GitHub App (Coming Phase 2)</h2>
+          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
+            Planned
           </span>
         </div>
 
-        <p className="mt-2 text-sm text-white/60">
-          Install GitHub App once to enable private repo access and automatic push-based re-sync.
+        <p className="mt-2 text-sm text-amber-100/80">
+          Automatic syncing on git push is coming in Phase 2. This will keep your indexed code up-to-date with the latest commits.
         </p>
-
-        {githubAppSetupMessage ? (
-          <p className="mt-3 text-xs text-emerald-200">{githubAppSetupMessage}</p>
-        ) : null}
-
-        {githubAppStatusError ? <p className="mt-3 text-xs text-amber-200">{githubAppStatusError}</p> : null}
-
-        {!githubAppConfigured ? (
-          <p className="mt-3 text-xs text-white/55">
-            GitHub App setup is currently unavailable.
-          </p>
-        ) : null}
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {githubAppConfigured ? (
-            <a
-              href="/api/github/app/install"
-              className="rounded-lg bg-[#F04D26] px-4 py-2 text-sm font-medium text-white hover:bg-[#de4723]"
-            >
+      </article>
               Install GitHub App
             </a>
           ) : (
@@ -246,73 +228,17 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         ) : null}
       </article>
 
-      <article className="rounded-xl border border-white/10 bg-[#111111] p-5">
+      <article className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">GitHub Auto-Sync</h2>
-          <span
-            className={`rounded-full border px-2.5 py-1 text-xs ${
-              githubAutoSyncEnabled
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                : "border-white/15 bg-white/5 text-white/65"
-            }`}
-          >
-            {githubAutoSyncEnabled ? "Enabled" : "Disabled"}
+          <h2 className="text-lg font-semibold">GitHub Auto-Sync (Coming Phase 2)</h2>
+          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
+            Planned
           </span>
         </div>
 
-        <p className="mt-2 text-sm text-white/60">
-          Push events from GitHub trigger re-index jobs for matching repositories using app installation tokens.
+        <p className="mt-2 text-sm text-amber-100/80">
+          When GitHub App is installed, push events will trigger automatic re-indexing to keep your embeddings fresh.
         </p>
-
-        {syncStatusError ? <p className="mt-3 text-xs text-amber-200">{syncStatusError}</p> : null}
-
-        {!githubAutoSyncEnabled ? (
-          <p className="mt-3 text-xs text-white/55">
-            Automatic sync is currently unavailable.
-          </p>
-        ) : null}
-
-        {githubSources.length === 0 ? (
-          <p className="mt-4 text-sm text-white/55">No GitHub sources available yet.</p>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {githubSources.map((source) => {
-              const job = latestSyncJobBySource.get(source.id);
-              const effectiveStatus = job?.status || "never";
-              const statusText = statusLabel(job);
-              const lastUpdatedText = job?.completed_at
-                ? `Last synced: ${new Date(job.completed_at).toLocaleString()}`
-                : job?.updated_at
-                  ? `Updated: ${new Date(job.updated_at).toLocaleString()}`
-                  : "No sync received yet";
-
-              return (
-                <div
-                  key={source.id}
-                  className="rounded-lg border border-white/10 bg-[#151515] px-4 py-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-white">{source.name}</p>
-                      <p className="mt-1 line-clamp-1 text-xs text-white/55">{source.github_url}</p>
-                    </div>
-                    <span
-                      className={`rounded-full border px-2.5 py-1 text-xs ${statusBadgeClass(
-                        effectiveStatus,
-                      )}`}
-                    >
-                      {statusText}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-white/50">{lastUpdatedText}</p>
-                  {job?.status === "failed" && job.error_msg ? (
-                    <p className="mt-2 text-xs text-red-200">{job.error_msg}</p>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </article>
     </section>
   );
