@@ -22,6 +22,7 @@ type SyncJob = {
 
 type GithubAppInstallation = {
   installation_id: number;
+  user_id?: string | null;
   account_login: string;
   account_type: string;
   updated_at: string;
