@@ -58,8 +58,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const { plan } = await checkRepoLimit(auth.user.id);
+    console.log(`[${requestId}] User plan:`, plan);
 
     const { url } = await req.json();
+    console.log(`[${requestId}] Parsed URL:`, url);
     const validatedUrl = githubUrlSchema.parse(url).replace(/\/$/, "").replace(/\.git$/, "");
 
     const urlParts = validatedUrl.replace("https://github.com/", "").split("/");
@@ -158,6 +160,7 @@ export async function POST(req: NextRequest) {
     }
 
     sourceId = uuidv4();
+    console.log(`[${requestId}] Inserting source with ID:`, sourceId);
     const { error: sourceError } = await supabase.from("sources").insert({
       id: sourceId,
       user_id: auth.user.id,
@@ -168,6 +171,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (sourceError) {
+      console.log(`[${requestId}] Source insert error:`, sourceError);
       throw sourceError;
     }
 
@@ -236,6 +240,8 @@ export async function POST(req: NextRequest) {
     }
 
     console.error(`[${requestId}] Ingest GitHub Error:`, error);
+    console.error(`[${requestId}] Error stack:`, error instanceof Error ? error.stack : '');
+    console.error(`[${requestId}] Error cause:`, error instanceof Error ? error.cause : '');
     
     // Check if this is a timeout/504 issue
     const errorMsg = error instanceof Error ? error.message : String(error);
