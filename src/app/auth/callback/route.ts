@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { supabase as adminSupabase } from "@/lib/db";
 import { encryptGithubToken } from "@/lib/github-token-crypto";
 
 function buildRedirectUrl(req: NextRequest, path: string): URL {
@@ -9,6 +10,43 @@ function buildRedirectUrl(req: NextRequest, path: string): URL {
 type SessionWithProviderToken = {
   provider_token?: string;
 };
+
+type OAuthUserMetadata = {
+  full_name?: string;
+  name?: string;
+  email?: string;
+};
+
+function buildProfileName(userId: string, email: string | null, metadata: OAuthUserMetadata): string {
+  const fromMetadata = metadata.full_name?.trim() || metadata.name?.trim();
+  if (fromMetadata) return fromMetadata;
+
+  if (email) {
+    const localPart = email.split("@")[0]?.trim();
+    if (localPart) return localPart;
+  }
+
+  return `user-${userId.slice(0, 8)}`;
+}
+
+async function ensureUserProfile(user: { id: string; email?: string | null; user_metadata?: OAuthUserMetadata }) {
+  const email = user.email?.trim() || user.user_metadata?.email?.trim() || `${user.id}@oauth.local`;
+  const name = buildProfileName(user.id, user.email ?? user.user_metadata?.email ?? null, user.user_metadata ?? {});
+
+  const { error } = await adminSupabase.from("users").upsert(
+    {
+      id: user.id,
+      email,
+      name,
+      password_hash: "",
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    console.error("[auth/callback] Failed to ensure user profile:", error.message);
+  }
+}
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
@@ -26,6 +64,10 @@ export async function GET(req: NextRequest) {
   if (error) {
     const url = buildRedirectUrl(req, "/login?error=auth_failed");
     return NextResponse.redirect(url);
+  }
+
+  if (data.user) {
+    await ensureUserProfile(data.user);
   }
 
   if (connect === "github") {

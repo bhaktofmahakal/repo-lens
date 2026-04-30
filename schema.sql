@@ -107,9 +107,21 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.users (id, email)
-  VALUES (NEW.id, NEW.email)
-  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
+  VALUES (
+    NEW.id,
+    COALESCE(
+      NEW.email,
+      NEW.raw_user_meta_data->>'email',
+      NEW.id::text || '@oauth.local'
+    )
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email;
   RETURN NEW;
+EXCEPTION
+  WHEN others THEN
+    RAISE WARNING 'handle_new_user failed for %: %', NEW.id, SQLERRM;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
