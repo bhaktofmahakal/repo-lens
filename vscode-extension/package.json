@@ -26,15 +26,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onView:repolens.sidebar",
-    "onCommand:repolens.askQuestion",
-    "onCommand:repolens.ingestRepo",
-    "onCommand:repolens.refreshSidebar",
-    "onCommand:repolens.setApiKey",
-    "onCommand:repolens.setRepoId",
-    "onCommand:repolens.openCitation"
-  ],
   "main": "./extension.js",
   "scripts": {
     "test": "node --test test/**/*.test.cjs"
