@@ -226,20 +226,46 @@ function IngestDashboard() {
   const handleZipUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!zipFile) return;
+
+    // Client-side guard: catch oversized files before the network round-trip.
+    const MAX_ZIP_MB = 45;
+    if (zipFile.size > MAX_ZIP_MB * 1024 * 1024) {
+      setError(`ZIP file is too large (${(zipFile.size / (1024 * 1024)).toFixed(1)} MB). The limit is ${MAX_ZIP_MB} MB.`);
+      return;
+    }
+
     setLoading(true); setError(null);
     const formData = new FormData();
     formData.append("file", zipFile);
     try {
       const res = await fetch("/api/ingest/zip", { method: "POST", body: formData });
-      const data = await res.json();
+
+      // Defensive JSON parsing — the server may return plain-text errors
+      // (e.g. "Request Entity Too Large") when the body limit is exceeded,
+      // which would cause res.json() to throw with a misleading parse error.
+      let data: Record<string, unknown> = {};
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        if (res.status === 413) {
+          throw new Error(
+            `The ZIP file is too large for the server to accept (HTTP 413). ` +
+            `Try a smaller archive under ${MAX_ZIP_MB} MB.`
+          );
+        }
+        throw new Error(text.trim() || `Unexpected server error (${res.status}).`);
+      }
+
       if (res.status === 402 && data?.error === "LIMIT_EXCEEDED") {
         setLimitState({
-          planRequired: data.plan_required || "pro",
-          message: data.message || "You reached your current plan limits.",
+          planRequired: (data.plan_required as "pro" | "team") || "pro",
+          message: (data.message as string) || "You reached your current plan limits.",
         });
         return;
       }
-      if (!res.ok) throw new Error(data.error || "Failed to upload ZIP");
+      if (!res.ok) throw new Error((data.error as string) || "Failed to upload ZIP");
       router.push(`/ask?sourceId=${data.sourceId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Upload failed");

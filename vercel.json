@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/app/api/ingest/zip/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}

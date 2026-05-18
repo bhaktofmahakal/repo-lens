@@ -7,6 +7,9 @@ import { requireRequestAuth } from "@/lib/auth-guard";
 import { capturePosthogEvent } from "@/lib/posthog";
 import { checkRepoLimit, checkRepoSize, LimitExceededError } from "@/lib/check-limits";
 
+// Allow up to 5 minutes for large ZIP ingestion (chunking + embedding).
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const auth = await requireRequestAuth(req);

@@ -30,6 +30,13 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Raise body-size limit so large ZIP uploads (up to 50 MB) are not
+      // rejected with a raw 413 before reaching the Route Handler.
+      bodySizeLimit: "50mb",
+    },
+  },
   async headers() {
     return [
       {
