@@ -219,6 +219,7 @@ function IngestDashboard() {
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [githubUrl, setGithubUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [limitState, setLimitState] = useState<LimitState | null>(null);
   const router = useRouter();
@@ -227,49 +228,97 @@ function IngestDashboard() {
     e.preventDefault();
     if (!zipFile) return;
 
-    // Client-side guard: catch oversized files before the network round-trip.
+    // Client-side guard: show a clear message before any network request.
     const MAX_ZIP_MB = 45;
     if (zipFile.size > MAX_ZIP_MB * 1024 * 1024) {
-      setError(`ZIP file is too large (${(zipFile.size / (1024 * 1024)).toFixed(1)} MB). The limit is ${MAX_ZIP_MB} MB.`);
+      setError(
+        `ZIP file is too large (${(zipFile.size / (1024 * 1024)).toFixed(1)} MB). The limit is ${MAX_ZIP_MB} MB.`,
+      );
       return;
     }
 
-    setLoading(true); setError(null);
-    const formData = new FormData();
-    formData.append("file", zipFile);
-    try {
-      const res = await fetch("/api/ingest/zip", { method: "POST", body: formData });
+    setLoading(true);
+    setError(null);
+    setUploadStatus("Preparing upload…");
 
-      // Defensive JSON parsing — the server may return plain-text errors
-      // (e.g. "Request Entity Too Large") when the body limit is exceeded,
-      // which would cause res.json() to throw with a misleading parse error.
-      let data: Record<string, unknown> = {};
-      const contentType = res.headers.get("content-type") ?? "";
-      if (contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        if (res.status === 413) {
-          throw new Error(
-            `The ZIP file is too large for the server to accept (HTTP 413). ` +
-            `Try a smaller archive under ${MAX_ZIP_MB} MB.`
-          );
-        }
-        throw new Error(text.trim() || `Unexpected server error (${res.status}).`);
+    // Helper: parse JSON defensively (server may return plain-text errors).
+    async function parseResponse(res: Response): Promise<Record<string, unknown>> {
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("application/json")) return res.json();
+      const text = await res.text();
+      if (res.status === 413) {
+        throw new Error(
+          "The file is too large for the server. Please use a smaller ZIP (under 45 MB).",
+        );
       }
+      throw new Error(text.trim() || `Server error (${res.status}).`);
+    }
 
-      if (res.status === 402 && data?.error === "LIMIT_EXCEEDED") {
+    try {
+      // ── Step 1: Get a presigned upload URL ──────────────────────────────
+      const presignRes = await fetch("/api/ingest/zip/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: zipFile.name, fileSize: zipFile.size }),
+      });
+      const presignData = await parseResponse(presignRes);
+
+      if (presignRes.status === 402 && presignData.error === "LIMIT_EXCEEDED") {
         setLimitState({
-          planRequired: (data.plan_required as "pro" | "team") || "pro",
-          message: (data.message as string) || "You reached your current plan limits.",
+          planRequired: (presignData.plan_required as "pro" | "team") || "pro",
+          message: (presignData.message as string) || "You reached your current plan limits.",
         });
         return;
       }
-      if (!res.ok) throw new Error((data.error as string) || "Failed to upload ZIP");
-      router.push(`/ask?sourceId=${data.sourceId}`);
+      if (!presignRes.ok) throw new Error((presignData.error as string) || "Failed to prepare upload.");
+
+      const { signedUrl, sourceId } = presignData as {
+        signedUrl: string;
+        sourceId: string;
+        storagePath: string;
+      };
+
+      // ── Step 2: PUT the ZIP directly to Supabase Storage ────────────────
+      // This request goes straight to Supabase — it never hits Vercel, so
+      // the 4.5 MB serverless body limit does not apply.
+      setUploadStatus("Uploading ZIP…");
+      const uploadRes = await fetch(signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: zipFile,
+      });
+      if (!uploadRes.ok) {
+        const uploadText = await uploadRes.text().catch(() => "");
+        throw new Error(
+          uploadText.trim() || `Upload to storage failed (${uploadRes.status}).`,
+        );
+      }
+
+      // ── Step 3: Trigger server-side ingestion ───────────────────────────
+      setUploadStatus("Processing ZIP…");
+      const processRes = await fetch("/api/ingest/zip/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId }),
+      });
+      const processData = await parseResponse(processRes);
+
+      if (processRes.status === 402 && processData.error === "LIMIT_EXCEEDED") {
+        setLimitState({
+          planRequired: (processData.plan_required as "pro" | "team") || "pro",
+          message: (processData.message as string) || "You reached your current plan limits.",
+        });
+        return;
+      }
+      if (!processRes.ok) throw new Error((processData.error as string) || "Failed to ingest ZIP.");
+
+      router.push(`/ask?sourceId=${sourceId}`);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Upload failed");
-    } finally { setLoading(false); }
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setLoading(false);
+      setUploadStatus("");
+    }
   };
 
   const handleGithubIngest = async (e: React.FormEvent) => {
@@ -337,8 +386,17 @@ function IngestDashboard() {
                     type="submit" disabled={loading || !zipFile}
                     className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] text-sm font-semibold text-white transition-colors hover:bg-[#de4723] disabled:cursor-not-allowed disabled:bg-[#F04D26]/25 disabled:text-white/40"
                   >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    Ingest ZIP
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {uploadStatus || "Working…"}
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        Ingest ZIP
+                      </>
+                    )}
                   </button>
                 </form>
               </div>
