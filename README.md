@@ -1,6 +1,6 @@
 # Repo Lens
 
-Repo Lens is a Next.js application for repository ingestion and question answering with citation-backed responses.
+Repo Lens is a application for repository ingestion and question answering with citation-backed responses.
 
 It includes:
 - Web app (ingestion, Q&A, history, sharing, dashboard)
