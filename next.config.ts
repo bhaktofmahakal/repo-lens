@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";
 const posthogSources = ["https://*.posthog.com", "https://*.i.posthog.com"];
+const vercelAnalyticsSources = ["https://va.vercel-scripts.com", "https://*.vercel-analytics.com"];
 // Allow the browser to PUT directly to Supabase Storage (presigned upload).
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
@@ -19,9 +20,9 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       // unsafe-eval only in dev (webpack HMR); stripped from production
-      `script-src 'self' 'unsafe-inline' https://vercel.live ${posthogSources.join(" ")}${isDev ? " 'unsafe-eval'" : ""}`,
+      `script-src 'self' 'unsafe-inline' https://vercel.live ${posthogSources.join(" ")} ${vercelAnalyticsSources.join(" ")}${isDev ? " 'unsafe-eval'" : ""}`,
       "img-src 'self' data: blob:",
-      `connect-src 'self' https://vercel.live ${posthogSources.join(" ")}${supabaseUrl ? ` ${supabaseUrl}` : ""}`,
+      `connect-src 'self' https://vercel.live ${posthogSources.join(" ")} ${vercelAnalyticsSources.join(" ")}${supabaseUrl ? ` ${supabaseUrl}` : ""}`,
       "frame-src 'self' https://vercel.live",
       "object-src 'none'",
       "base-uri 'self'",
