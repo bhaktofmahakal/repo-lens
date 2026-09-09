@@ -28,6 +28,7 @@ Thumbs.db
 coverage
 dist
 build
+*.tsbuildinfo
 
 # local scratch artifacts
 .tmp-tests
@@ -35,6 +36,7 @@ build
 # internal/private files
 .agents/
 Repolens-prd.md
+DESIGN-cohere.md
 skills-lock.json
 VIDEO_*.md
 .markdown-collab/

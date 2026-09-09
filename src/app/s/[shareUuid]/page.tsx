@@ -3,7 +3,21 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Calendar, Loader2, MessageSquare } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  Calendar,
+  Check,
+  Clock,
+  Copy,
+  ExternalLink,
+  Eye,
+  FileCode,
+  Layers,
+  Loader2,
+  MessageSquare,
+  Sparkles,
+} from "lucide-react";
 import { Citation } from "@/types";
 
 type SharedSource = {
@@ -40,7 +54,6 @@ function extractApiError(payload: unknown, fallback: string): string {
   ) {
     return (payload as { error: string }).error;
   }
-
   return fallback;
 }
 
@@ -57,20 +70,16 @@ export default function SharedSessionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<SharedPayload | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!shareUuid) {
-      setError("Invalid share link.");
-      setLoading(false);
-      return;
-    }
+    if (!shareUuid) return;
 
-    const fetchSharedSession = async () => {
+    const fetchShared = async () => {
       setLoading(true);
       setError(null);
-
       try {
-        const res = await fetch(`/api/share/${shareUuid}`);
+        const res = await fetch(`/api/share/${encodeURIComponent(shareUuid)}`);
         const data: unknown = await res.json();
 
         if (!res.ok) {
@@ -79,101 +88,178 @@ export default function SharedSessionPage() {
 
         setPayload(data as SharedPayload);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load shared session.");
+        setError(err instanceof Error ? err.message : "Shared link is invalid or expired.");
       } finally {
         setLoading(false);
       }
     };
 
-    void fetchSharedSession();
+    fetchShared();
   }, [shareUuid]);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#151515]">
-        <Loader2 className="h-10 w-10 animate-spin text-[#F04D26]" />
+      <div className="flex min-h-screen items-center justify-center bg-[#0e0e11] text-white">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-white/60" />
+          <p className="font-mono text-xs text-white/50">Decrypting shared code intelligence report...</p>
+        </div>
       </div>
     );
   }
 
   if (error || !payload) {
     return (
-      <div className="min-h-screen bg-[#151515] px-4 py-16">
-        <div className="mx-auto max-w-2xl rounded-2xl border border-red-500/40 bg-red-900/10 p-6 text-center">
-          <h1 className="text-xl font-semibold text-red-200">Shared session unavailable</h1>
-          <p className="mt-2 text-sm text-red-200/80">{error || "This share link is invalid or no longer active."}</p>
-          <Link
-            href="/"
-            className="mt-6 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#111111] px-4 py-2 text-sm text-white/80 transition hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Go to RepoLens
-          </Link>
+      <div className="flex min-h-screen items-center justify-center bg-[#0e0e11] px-4 text-white">
+        <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#17171c] p-8 text-center shadow-2xl">
+          <span className="cohere-mono-label text-[10px] text-red-400">ACCESS EXPIRED OR INVALID</span>
+          <h2 className="mt-2 text-lg font-bold text-white font-mono">Shared Session Unavailable</h2>
+          <p className="mt-2 text-xs text-white/60 leading-relaxed">
+            {error || "This shared report link could not be located. It may have expired or been revoked by the repository owner."}
+          </p>
+          <div className="mt-6">
+            <Link href="/" className="btn-cohere-primary">
+              Return to RepoLens
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#151515]">
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <header className="mb-8 rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5">
-          <h1 className="text-2xl font-semibold text-white">Shared Q&amp;A Session</h1>
-          <p className="mt-1 text-sm text-[#7d7d87]">
-            Read-only history from {payload.source?.name || "a RepoLens source"}
-            {payload.source?.type ? ` (${payload.source.type})` : ""}
-          </p>
-          <div className="mt-3 text-xs text-white/60">
-            Views: {payload.shared.view_count} · Shared on {new Date(payload.shared.created_at).toLocaleString()}
-          </div>
-        </header>
+    <div className="min-h-screen bg-[#0e0e11] text-white">
+      {/* Top Header */}
+      <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#0e0e11]/90 backdrop-blur-md">
+        <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-[#17171c] text-white">
+              <Layers className="h-4 w-4 text-[#ff7759]" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-mono text-sm font-bold tracking-tight text-white">RepoLens</span>
+              <span className="cohere-mono-label text-[9px] -mt-0.5">READ-ONLY AUDIT REPORT</span>
+            </div>
+          </Link>
 
+          <Link href="/login" className="btn-cohere-primary !py-1.5 text-xs">
+            <span>Try RepoLens Free</span>
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+        {/* Banner with metadata */}
+        <div className="mb-8 rounded-xl border border-white/10 bg-[#17171c] p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="cohere-mono-label">VERIFIED CODEBASE REPORT</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="font-mono text-[10px] text-emerald-400">IMMUTABLE SNAPSHOT</span>
+              </div>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-white font-mono">
+                {payload.source?.name || "Shared Codebase"}
+              </h1>
+              <p className="mt-1 text-xs text-white/60 font-mono">
+                Shared on {new Date(payload.shared.created_at).toLocaleDateString()} • {payload.shared.view_count} views
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-right">
+              <div className="cohere-mono-label text-[9px]">TOTAL INQUIRIES</div>
+              <div className="font-mono text-base font-bold text-white">{payload.history.length}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* History List */}
         {payload.history.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-[#1a1a1a]/40 py-20 text-center text-base italic text-[#7d7d87]">
-            No Q&amp;A history has been shared yet.
+          <div className="rounded-xl border border-dashed border-white/10 bg-[#141418] p-12 text-center text-xs text-white/50 font-mono">
+            No query history is available in this shared session.
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {payload.history.map((item, idx) => (
-              <article key={item.id} className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
-                <header className="mb-4 flex items-center justify-between border-b border-white/[0.06] pb-3">
-                  <span className="flex items-center gap-2 text-sm text-[#7d7d87]">
-                    <Calendar className="h-4 w-4" />
-                    {new Date(item.created_at).toLocaleString()}
-                  </span>
-                  <span className="rounded-lg bg-[#0e0e0e] px-2.5 py-1 text-xs font-mono text-white/50">
-                    #{payload.history.length - idx}
-                  </span>
-                </header>
-
-                <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <MessageSquare className="mt-1 h-5 w-5 shrink-0 text-[#F04D26] opacity-70" />
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">{item.question}</h3>
-                      <div className="mt-4 whitespace-pre-wrap leading-relaxed text-white/70">{item.answer}</div>
-                    </div>
+              <article
+                key={item.id}
+                className="rounded-xl border border-white/10 bg-[#141418] p-6 transition-all hover:border-white/20"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 text-xs text-white/40">
+                  <div className="flex items-center gap-2 font-mono">
+                    <Clock className="h-3.5 w-3.5 text-white/40" />
+                    <span>{new Date(item.created_at).toLocaleString()}</span>
                   </div>
 
-                  {Array.isArray(item.citations_json) && item.citations_json.length > 0 && (
-                    <div className="flex flex-wrap gap-2 border-t border-white/[0.06] pt-4">
-                      <span className="mb-1 w-full text-sm font-semibold text-white/70">Citations:</span>
-                      {item.citations_json.map((citation, citationIndex) => (
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(item.answer, item.id)}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-mono text-white/60 hover:text-white transition-colors"
+                  >
+                    {copiedId === item.id ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-400" />
+                        <span className="text-emerald-400">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" />
+                        <span>Copy Answer</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Question */}
+                <div className="mt-4">
+                  <div className="cohere-mono-label text-[10px]">INQUIRY</div>
+                  <h3 className="mt-1 text-base font-semibold tracking-tight text-white leading-snug">
+                    {item.question}
+                  </h3>
+                </div>
+
+                {/* Answer with Markdown rendering */}
+                <div className="mt-4 rounded-lg border border-white/[0.06] bg-[#0d0d10] p-4">
+                  <div className="cohere-mono-label text-[10px] text-[#ff7759] mb-2">VERIFIED RESPONSE</div>
+                  <div className="prose prose-invert max-w-none text-xs leading-relaxed text-white/85">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {item.answer}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+
+                {/* Citations Footer */}
+                {Array.isArray(item.citations_json) && item.citations_json.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-white/[0.06]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="cohere-mono-label text-[10px]">EVIDENCE CITATIONS:</span>
+                      {item.citations_json.map((c, cIdx) => (
                         <div
-                          key={`${item.id}-cit-${citationIndex}`}
-                          className="rounded-lg border border-white/10 bg-[#0e0e0e] px-2.5 py-1 text-xs font-mono text-[#7d7d87]"
+                          key={cIdx}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] text-white/80"
                         >
-                          {citation.filePath} (L{citation.startLine}-{citation.endLine})
+                          <FileCode className="h-3 w-3 text-[#ff7759]" />
+                          <span className="truncate max-w-[240px]">{c.filePath}</span>
+                          <span className="text-white/40">:{c.startLine}-{c.endLine}</span>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </article>
             ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

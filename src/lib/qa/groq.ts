@@ -6,8 +6,20 @@ const RESOLVED_GROQ_API_KEY = GROQ_API_KEY || "placeholder";
 
 const groq = new Groq({ apiKey: RESOLVED_GROQ_API_KEY });
 
+export const PRIMARY_GROQ_MODEL = process.env.GROQ_MODEL_ID || "llama-3.3-70b-versatile";
+export const FALLBACK_GROQ_MODELS = [
+  PRIMARY_GROQ_MODEL,
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "mixtral-8x7b-32768",
+];
+
 export function isGroqConfigured(): boolean {
   return isConfiguredEnvValue(GROQ_API_KEY);
+}
+
+export function getCurrentGroqModel(): string {
+  return PRIMARY_GROQ_MODEL;
 }
 
 export async function checkGroqHealth(): Promise<boolean> {
@@ -27,28 +39,42 @@ export async function generateAnswer(prompt: string): Promise<string> {
     throw new Error("Missing GROQ_API_KEY environment variable.");
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000); // 25 second timeout
+  const candidateModels = Array.from(new Set(FALLBACK_GROQ_MODELS));
+  let lastError: unknown = null;
 
-  try {
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: "You are a code Q&A assistant. Answer ONLY using the provided evidence. Be concise and direct.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      model: "llama-3.1-70b-versatile",
-      temperature: 0.1,
-      max_tokens: 1024,
-    });
+  for (const model of candidateModels) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000); // 25 second timeout
 
-    return completion.choices[0]?.message?.content || "No answer generated.";
-  } finally {
-    clearTimeout(timeout);
+    try {
+      const completion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an enterprise code intelligence assistant. Answer ONLY using the provided evidence. Be concise, direct, accurate, and provide code references with exact line citations where relevant.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        model,
+        temperature: 0.1,
+        max_tokens: 2048,
+      });
+
+      return completion.choices[0]?.message?.content || "No answer generated.";
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`Groq completion failed with model ${model}:`, error?.message || error);
+      // If error is due to model deprecation/not found, try next model in fallback chain
+      continue;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  throw lastError || new Error("Failed to generate answer with all available Groq models.");
 }
+

@@ -33,6 +33,8 @@ export interface AskResponse {
   retrievedSnippets: Citation[];
   confidence?: number;
   note_when_insufficient_evidence?: string;
+  sessionId?: string;
+  latencyMs?: number;
 }
 
 export interface RefactorSuggestion {

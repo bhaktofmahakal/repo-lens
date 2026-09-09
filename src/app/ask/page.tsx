@@ -2,26 +2,36 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowLeft,
+  ArrowRight,
   Check,
   ChevronDown,
+  Clock,
   Code2,
+  Copy,
+  Database,
   ExternalLink,
+  FileCode,
   Github,
   History,
+  Layers,
   Loader2,
-  LogOut,
+  MessageSquare,
   Search,
+  Sparkles,
   ThumbsDown,
   ThumbsUp,
   Upload,
   Wand2,
+  X,
+  Zap,
 } from "lucide-react";
 import { AskResponse, Citation, RefactorResponse } from "@/types";
-import { createClient } from "@/lib/supabase/client";
+import { CohereNavbar } from "@/components/navigation/CohereNavbar";
 
 type EvidenceTag = {
   id: string;
@@ -34,34 +44,99 @@ type LimitState = {
   message: string;
 };
 
-function UpgradeModal({
-  state,
-  onClose,
-}: {
-  state: LimitState;
-  onClose: () => void;
-}) {
+type SourceItem = {
+  id: string;
+  name: string;
+  type: string;
+  github_url: string | null;
+  chunk_count?: number;
+};
+
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  response?: AskResponse;
+  timestamp: string;
+};
+
+// Formatted Code Block with Copy Action
+function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const match = /language-(\w+)/.exec(className || "");
+  const language = match ? match[1] : "";
+  const codeContent = String(children).replace(/\n$/, "");
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const isInline = !className && typeof children === "string" && !children.includes("\n");
+
+  if (isInline) {
+    return (
+      <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[11px] text-[#ff7759]">
+        {children}
+      </code>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111111] p-6">
-        <h2 className="text-xl font-semibold text-white">Upgrade Required</h2>
-        <p className="mt-2 text-sm text-white/70">{state.message}</p>
-        <p className="mt-2 text-xs uppercase tracking-wide text-[#F04D26]">
-          Recommended plan: {state.planRequired}
+    <div className="my-3 overflow-hidden rounded-lg border border-white/10 bg-[#0d0d10]">
+      <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#141418] px-3.5 py-1.5 text-[11px] font-mono text-white/50">
+        <span className="uppercase tracking-wider text-[10px] text-[#93939f]">
+          {language || "code"}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1 text-white/60 hover:text-white transition-colors"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 text-emerald-400" />
+              <span className="text-emerald-400">Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="overflow-x-auto p-3.5 font-mono text-xs leading-relaxed text-white/90 selection:bg-[#ff7759]/30">
+        <code>{children}</code>
+      </pre>
+    </div>
+  );
+}
+
+function UpgradeModal({ state, onClose }: { state: LimitState; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md">
+      <div className="w-full max-w-md rounded-xl border border-white/15 bg-[#17171c] p-6 shadow-2xl">
+        <span className="cohere-mono-label text-[10px] text-[#ff7759]">LIMIT EXCEEDED</span>
+        <h2 className="mt-1 text-base font-bold text-white font-mono">Subscription Upgrade Required</h2>
+        <p className="mt-2 text-xs text-white/70 leading-relaxed">{state.message}</p>
+        <p className="mt-2 text-[11px] font-mono text-white/50">
+          Recommended Plan: <span className="uppercase text-white font-semibold">{state.planRequired}</span>
         </p>
-        <div className="mt-5 flex gap-2">
-          <a
+        <div className="mt-6 flex gap-2 border-t border-white/10 pt-4">
+          <Link
             href="/dashboard/billing"
-            className="rounded-lg bg-[#F04D26] px-4 py-2 text-sm font-medium text-white hover:bg-[#de4723]"
+            className="btn-cohere-primary !py-1.5 text-xs"
           >
             Upgrade to {state.planRequired === "pro" ? "Pro" : "Team"}
-          </a>
+          </Link>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/80 hover:bg-white/5"
+            className="btn-cohere-outline !py-1.5 text-xs"
           >
-            Not now
+            Close
           </button>
         </div>
       </div>
@@ -69,524 +144,217 @@ function UpgradeModal({
   );
 }
 
-function normalizeSearchValue(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function matchesEvidence(citation: Citation, query: string): boolean {
-  if (!query) return true;
+function RefactorModal({
+  refactorResponse,
+  loading,
+  error,
+  onClose,
+}: {
+  refactorResponse: RefactorResponse | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
   return (
-    citation.filePath.toLowerCase().includes(query) ||
-    citation.snippet.toLowerCase().includes(query)
-  );
-}
-
-function getFileExtension(filePath: string): string {
-  const fileName = filePath.toLowerCase().split("/").pop() || "";
-  const dotIndex = fileName.lastIndexOf(".");
-  if (dotIndex === -1 || dotIndex === fileName.length - 1) return "no-ext";
-  return fileName.slice(dotIndex + 1);
-}
-
-function getTopLevelDir(filePath: string): string {
-  const normalized = filePath
-    .replace(/\\/g, "/")
-    .replace(/^\.\/+/, "")
-    .replace(/^\/+/, "")
-    .toLowerCase();
-  const firstSegment = normalized.split("/")[0]?.trim();
-  if (!firstSegment || firstSegment === ".") return "root";
-  return firstSegment;
-}
-
-function deriveEvidenceTags(response: AskResponse, askedQuestion: string): EvidenceTag[] {
-  const items = response.retrievedSnippets.length > 0 ? response.retrievedSnippets : response.citations;
-  if (items.length === 0) return [];
-
-  const tagMap = new Map<string, EvidenceTag>();
-  const addTag = (id: string, label: string, count = 1) => {
-    const existing = tagMap.get(id);
-    if (existing) {
-      existing.count += count;
-      return;
-    }
-    tagMap.set(id, { id, label, count });
-  };
-
-  for (const item of items) {
-    const ext = getFileExtension(item.filePath);
-    const dir = getTopLevelDir(item.filePath);
-    addTag(`ext:${ext}`, `.${ext}`);
-    addTag(`dir:${dir}`, dir);
-  }
-
-  const question = askedQuestion.toLowerCase();
-  const topicRules: Array<{ topic: string; terms: string[] }> = [
-    { topic: "auth", terms: ["auth", "login", "session", "token"] },
-    { topic: "retry", terms: ["retry", "retries", "backoff"] },
-    { topic: "db", terms: ["db", "database", "sql", "prisma", "supabase"] },
-    { topic: "api", terms: ["api", "endpoint", "route", "request"] },
-  ];
-
-  for (const rule of topicRules) {
-    if (rule.terms.some((term) => question.includes(term))) {
-      addTag(`topic:${rule.topic}`, rule.topic, 2);
-    }
-  }
-
-  return Array.from(tagMap.values())
-    .sort((a, b) => (b.count === a.count ? a.label.localeCompare(b.label) : b.count - a.count))
-    .slice(0, 10);
-}
-
-function matchesTagFilter(citation: Citation, activeTagId: string): boolean {
-  if (!activeTagId) return true;
-
-  const [kind, value] = activeTagId.split(":", 2);
-  if (!kind || !value) return true;
-
-  if (kind === "ext") return getFileExtension(citation.filePath) === value;
-  if (kind === "dir") return getTopLevelDir(citation.filePath) === value;
-  if (kind === "topic") {
-    const haystack = `${citation.filePath}\n${citation.snippet}`.toLowerCase();
-    return haystack.includes(value);
-  }
-
-  return true;
-}
-
-const markdownComponents: Components = {
-  h1: ({ ...props }) => <h1 className="mb-4 mt-1 text-2xl font-semibold text-white" {...props} />,
-  h2: ({ ...props }) => <h2 className="mb-3 mt-6 text-xl font-semibold text-white/90" {...props} />,
-  h3: ({ ...props }) => <h3 className="mb-3 mt-5 text-lg font-semibold text-white/90" {...props} />,
-  p: ({ ...props }) => <p className="mb-4 leading-7 text-white/75" {...props} />,
-  ul: ({ ...props }) => <ul className="mb-4 list-disc space-y-2 pl-6 text-white/75" {...props} />,
-  ol: ({ ...props }) => <ol className="mb-4 list-decimal space-y-2 pl-6 text-white/75" {...props} />,
-  li: ({ ...props }) => <li className="leading-7" {...props} />,
-  a: ({ ...props }) => (
-    <a className="text-[#F04D26] underline underline-offset-2 transition-colors hover:text-[#ff6e4a]" {...props} />
-  ),
-  pre: ({ ...props }) => <pre className="mb-4 overflow-x-auto rounded-xl border border-white/10 bg-[#0e0e0e] p-4" {...props} />,
-  code: ({ className, children, ...props }) => {
-    const isBlockCode = typeof className === "string" && className.length > 0;
-    if (isBlockCode) {
-      return (
-        <code className={`${className} text-sm text-white/85`} {...props}>
-          {children}
-        </code>
-      );
-    }
-
-    return (
-      <code className="rounded bg-[#1a1a1a] px-1.5 py-1 text-[0.9em] text-[#F04D26]" {...props}>
-        {children}
-      </code>
-    );
-  },
-};
-
-function CitationCard({ citation }: { citation: Citation }) {
-  const Wrapper = citation.sourceUrl ? "a" : "div";
-  return (
-    <Wrapper
-      {...(citation.sourceUrl
-        ? { href: citation.sourceUrl, target: "_blank", rel: "noopener noreferrer" }
-        : {})}
-      className="group block min-w-0 overflow-hidden rounded-xl border border-white/[0.07] bg-[#1a1a1a] p-4 transition-colors hover:border-[#F04D26]/40"
-    >
-      <div className="mb-2 flex min-w-0 items-start justify-between gap-2">
-        <span
-          className="min-w-0 break-all font-mono text-xs font-semibold text-white/85"
-          title={citation.filePath}
-        >
-          {citation.filePath}
-        </span>
-        <span className="shrink-0 rounded bg-[#0e0e0e] px-2 py-1 text-[11px] font-medium text-white/60">
-          L{citation.startLine}–L{citation.endLine}
-        </span>
-      </div>
-      <p className="max-h-20 overflow-hidden break-words text-xs leading-5 text-[#7d7d87]">{citation.snippet}</p>
-      {citation.sourceUrl ? (
-        <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[#F04D26] group-hover:text-[#ff6e4a]">
-          View source <ExternalLink className="h-3.5 w-3.5" />
-        </span>
-      ) : null}
-    </Wrapper>
-  );
-}
-
-function IngestDashboard() {
-  const [zipFile, setZipFile] = useState<File | null>(null);
-  const [githubUrl, setGithubUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [limitState, setLimitState] = useState<LimitState | null>(null);
-  const router = useRouter();
-
-  const handleZipUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!zipFile) return;
-
-    // Client-side guard: show a clear message before any network request.
-    const MAX_ZIP_MB = 45;
-    if (zipFile.size > MAX_ZIP_MB * 1024 * 1024) {
-      setError(
-        `ZIP file is too large (${(zipFile.size / (1024 * 1024)).toFixed(1)} MB). The limit is ${MAX_ZIP_MB} MB.`,
-      );
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setUploadStatus("Preparing upload…");
-
-    // Helper: parse JSON defensively (server may return plain-text errors).
-    async function parseResponse(res: Response): Promise<Record<string, unknown>> {
-      const ct = res.headers.get("content-type") ?? "";
-      if (ct.includes("application/json")) return res.json();
-      const text = await res.text();
-      if (res.status === 413) {
-        throw new Error(
-          "The file is too large for the server. Please use a smaller ZIP (under 45 MB).",
-        );
-      }
-      throw new Error(text.trim() || `Server error (${res.status}).`);
-    }
-
-    try {
-      // ── Step 1: Get a presigned upload URL ──────────────────────────────
-      const presignRes = await fetch("/api/ingest/zip/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: zipFile.name, fileSize: zipFile.size }),
-      });
-      const presignData = await parseResponse(presignRes);
-
-      if (presignRes.status === 402 && presignData.error === "LIMIT_EXCEEDED") {
-        setLimitState({
-          planRequired: (presignData.plan_required as "pro" | "team") || "pro",
-          message: (presignData.message as string) || "You reached your current plan limits.",
-        });
-        return;
-      }
-      if (!presignRes.ok) throw new Error((presignData.error as string) || "Failed to prepare upload.");
-
-      const { signedUrl, sourceId } = presignData as {
-        signedUrl: string;
-        sourceId: string;
-        storagePath: string;
-      };
-
-      // ── Step 2: PUT the ZIP directly to Supabase Storage ────────────────
-      // This request goes straight to Supabase — it never hits Vercel, so
-      // the 4.5 MB serverless body limit does not apply.
-      setUploadStatus("Uploading ZIP…");
-      const uploadRes = await fetch(signedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: zipFile,
-      });
-      if (!uploadRes.ok) {
-        const uploadText = await uploadRes.text().catch(() => "");
-        throw new Error(
-          uploadText.trim() || `Upload to storage failed (${uploadRes.status}).`,
-        );
-      }
-
-      // ── Step 3: Trigger server-side ingestion ───────────────────────────
-      setUploadStatus("Processing ZIP…");
-      const processRes = await fetch("/api/ingest/zip/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId }),
-      });
-      const processData = await parseResponse(processRes);
-
-      if (processRes.status === 402 && processData.error === "LIMIT_EXCEEDED") {
-        setLimitState({
-          planRequired: (processData.plan_required as "pro" | "team") || "pro",
-          message: (processData.message as string) || "You reached your current plan limits.",
-        });
-        return;
-      }
-      if (!processRes.ok) throw new Error((processData.error as string) || "Failed to ingest ZIP.");
-
-      router.push(`/ask?sourceId=${sourceId}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
-    } finally {
-      setLoading(false);
-      setUploadStatus("");
-    }
-  };
-
-  const handleGithubIngest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!githubUrl.trim()) return;
-    setLoading(true); setError(null);
-    try {
-      const res = await fetch("/api/ingest/github", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: githubUrl.trim() }),
-      });
-      const data = await res.json();
-      if (res.status === 402 && data?.error === "LIMIT_EXCEEDED") {
-        setLimitState({
-          planRequired: data.plan_required || "pro",
-          message: data.message || "You reached your current plan limits.",
-        });
-        return;
-      }
-      if (!res.ok) throw new Error(data.error || "Failed to ingest GitHub repo");
-      router.push(`/ask?sourceId=${data.sourceId}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Ingest failed");
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="min-h-screen overflow-x-hidden bg-[#151515]">
-      <div className="mx-auto w-full max-w-[860px] px-4 py-10 sm:px-6 sm:py-16">
-        <div className="mb-8 text-center sm:mb-10">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F04D26]/40 bg-[#F04D26]/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-[#F04D26]">
-            Index a Codebase
-          </span>
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-            Start by importing your repository
-          </h1>
-          <p className="mt-3 text-sm text-[#7d7d87] sm:text-base">
-            Upload a ZIP archive or paste a public GitHub URL to get started.
-          </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-white/15 bg-[#17171c] shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <div>
+            <span className="cohere-mono-label text-[10px]">AI CODE ARCHITECTURE</span>
+            <h3 className="text-base font-bold text-white font-mono">Refactor Recommendations</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-white/50 hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          {/* ZIP upload */}
-          <div className="rounded-[28px] bg-[#1a1a1a] p-[5px]">
-            <div className="rounded-[25px] border border-white/[0.07] p-[2px]">
-              <div className="rounded-[22px] border border-white/[0.04] bg-[#111111] p-6">
-                <div className="mb-5 flex items-center gap-3">
-                  <div className="rounded-xl border border-[#F04D26]/30 bg-[#F04D26]/10 p-2.5">
-                    <Upload className="h-5 w-5 text-[#F04D26]" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Upload ZIP</h3>
-                    <p className="text-xs text-[#7d7d87]">Max 45 MB</p>
-                  </div>
-                </div>
-                <form onSubmit={handleZipUpload} className="space-y-4">
-                  <label htmlFor="zip-input" className="block text-sm font-medium text-white/70">ZIP archive</label>
-                  <input
-                    id="zip-input" type="file" accept=".zip"
-                    onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
-                    className="block w-full rounded-xl border border-white/10 bg-[#0e0e0e] px-3 py-3 text-sm text-white/80 file:mr-4 file:rounded-lg file:border-0 file:bg-[#F04D26] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#de4723] focus:border-[#F04D26]/50 focus:outline-none"
-                  />
-                  <button
-                    type="submit" disabled={loading || !zipFile}
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] text-sm font-semibold text-white transition-colors hover:bg-[#de4723] disabled:cursor-not-allowed disabled:bg-[#F04D26]/25 disabled:text-white/40"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {uploadStatus || "Working…"}
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4" />
-                        Ingest ZIP
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <Loader2 className="h-7 w-7 animate-spin text-white/60" />
+              <p className="font-mono text-xs text-white/50">Synthesizing architectural refactor suggestions...</p>
             </div>
-          </div>
-
-          {/* GitHub ingest */}
-          <div className="rounded-[28px] bg-[#1a1a1a] p-[5px]">
-            <div className="rounded-[25px] border border-white/[0.07] p-[2px]">
-              <div className="rounded-[22px] border border-white/[0.04] bg-[#111111] p-6">
-                <div className="mb-5 flex items-center gap-3">
-                  <div className="rounded-xl border border-white/15 bg-white/5 p-2.5">
-                    <Github className="h-5 w-5 text-white/80" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">GitHub Repo</h3>
-                    <p className="text-xs text-[#7d7d87]">Public repos · Max 2 000 files</p>
-                  </div>
-                </div>
-                <form onSubmit={handleGithubIngest} className="space-y-4">
-                  <label htmlFor="github-url" className="block text-sm font-medium text-white/70">Repository URL</label>
-                  <input
-                    id="github-url" type="url"
-                    placeholder="https://github.com/owner/repo"
-                    value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)}
-                    className="h-12 w-full rounded-xl border border-white/10 bg-[#0e0e0e] px-4 text-sm text-white/90 placeholder:text-white/30 focus:border-[#F04D26]/50 focus:outline-none focus:ring-2 focus:ring-[#F04D26]/15"
-                  />
-                  <button
-                    type="submit" disabled={loading || !githubUrl.trim()}
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] text-sm font-semibold text-white transition-colors hover:border-white/25 hover:bg-white/10 disabled:cursor-not-allowed disabled:border-white/5 disabled:text-white/30"
-                  >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
-                    Ingest Repo
-                  </button>
-                </form>
-              </div>
+          ) : error ? (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-xs text-red-300">
+              {error}
             </div>
-          </div>
+          ) : refactorResponse?.suggestions && refactorResponse.suggestions.length > 0 ? (
+            refactorResponse.suggestions.map((sug, idx) => (
+              <div key={idx} className="rounded-xl border border-white/10 bg-[#141418] p-4 space-y-2.5">
+                <div className="flex items-center justify-between font-mono text-xs">
+                  <span className="font-semibold text-white truncate max-w-[400px]">{sug.title}</span>
+                  <span className="cohere-mono-label text-[10px]">SUGGESTION #{idx + 1}</span>
+                </div>
+                <p className="text-xs text-white/70 leading-relaxed">{sug.rationale}</p>
+                {sug.expectedImpact && (
+                  <div className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-mono text-emerald-300">
+                    Expected Impact: {sug.expectedImpact}
+                  </div>
+                )}
+                {sug.citations && sug.citations.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {sug.citations.map((c, cIdx) => (
+                      <span
+                        key={cIdx}
+                        className="inline-flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/60"
+                      >
+                        {c.filePath}:{c.startLine}-{c.endLine}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="py-8 text-center text-xs text-white/50 font-mono">
+              No refactor suggestions generated for this scope.
+            </div>
+          )}
         </div>
 
-        {error && (
-          <div className="mt-6 rounded-xl border border-red-500/40 bg-red-900/15 p-4 text-sm text-red-300">
-            {error}
-          </div>
-        )}
+        <div className="border-t border-white/10 px-6 py-3 bg-[#141418] flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-cohere-outline !py-1 text-xs"
+          >
+            Close
+          </button>
+        </div>
       </div>
-      {limitState ? <UpgradeModal state={limitState} onClose={() => setLimitState(null)} /> : null}
     </div>
   );
 }
 
 function AskContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const sourceId = searchParams.get("sourceId");
-  const [question, setQuestion] = useState("");
-  const [askedQuestion, setAskedQuestion] = useState("");
+  const initialQuery = searchParams.get("q");
+
+  const [sources, setSources] = useState<SourceItem[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(!sourceId);
+
+  const [question, setQuestion] = useState(initialQuery || "");
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<AskResponse | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [activeResponse, setActiveResponse] = useState<AskResponse | null>(null);
+
+  const [refactorOpen, setRefactorOpen] = useState(false);
   const [refactorResponse, setRefactorResponse] = useState<RefactorResponse | null>(null);
   const [refactorLoading, setRefactorLoading] = useState(false);
   const [refactorError, setRefactorError] = useState<string | null>(null);
-  const [evidenceSearch, setEvidenceSearch] = useState("");
-  const [activeTagId, setActiveTagId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [logoutLoading, setLogoutLoading] = useState(false);
-  const [evidenceExpanded, setEvidenceExpanded] = useState(false);
+
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<"up" | "down" | null>(null);
-  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [limitState, setLimitState] = useState<LimitState | null>(null);
-  const router = useRouter();
+  const [copiedAnswer, setCopiedAnswer] = useState(false);
 
+  // Load user sources
   useEffect(() => {
+    async function loadSources() {
+      try {
+        const res = await fetch("/api/sources");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sources) setSources(data.sources);
+        }
+      } catch (err) {
+        console.error("Failed to load sources in ask:", err);
+      } finally {
+        setSourcesLoading(false);
+      }
+    }
+    loadSources();
+  }, []);
+
+  const currentSource = sources.find((s) => s.id === sourceId);
+
+  const suggestedQuestions = [
+    "What is the high-level architecture of this codebase?",
+    "How is authentication and session management implemented?",
+    "Where are the core database models and tables defined?",
+    "What external APIs or webhooks does this service interact with?",
+  ];
+
+  const executeAsk = async (queryText: string) => {
+    const trimmed = queryText.trim();
+    if (!trimmed || !sourceId) return;
+
+    const userMessageId = `user-${Date.now()}`;
+    const userMessage: ChatMessage = {
+      id: userMessageId,
+      role: "user",
+      content: trimmed,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
     setQuestion("");
-    setAskedQuestion("");
-    setResponse(null);
-    setRefactorResponse(null);
-    setRefactorError(null);
-    setError(null);
-    setEvidenceSearch("");
-    setActiveTagId("");
-    setFeedbackLoading(false);
-    setFeedbackRating(null);
-    setFeedbackError(null);
-    setLimitState(null);
-  }, [sourceId]);
-
-  const normalizedEvidenceSearch = normalizeSearchValue(evidenceSearch);
-  const evidenceTags = useMemo(() => {
-    if (!response) return [];
-    return deriveEvidenceTags(response, askedQuestion);
-  }, [response, askedQuestion]);
-
-  const filteredCitations = useMemo(() => {
-    if (!response) return [];
-    return response.citations.filter(
-      (citation) =>
-        matchesEvidence(citation, normalizedEvidenceSearch) &&
-        matchesTagFilter(citation, activeTagId),
-    );
-  }, [response, normalizedEvidenceSearch, activeTagId]);
-
-  const filteredSnippets = useMemo(() => {
-    if (!response) return [];
-    return response.retrievedSnippets.filter(
-      (snippet) =>
-        matchesEvidence(snippet, normalizedEvidenceSearch) &&
-        matchesTagFilter(snippet, activeTagId),
-    );
-  }, [response, normalizedEvidenceSearch, activeTagId]);
-
-  if (!sourceId) {
-    return <IngestDashboard />;
-  }
-
-  const handleAsk = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const normalizedQuestion = question.trim();
-    if (!normalizedQuestion || !sourceId) return;
-
     setLoading(true);
-    setError(null);
+    setFeedbackRating(null);
 
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: normalizedQuestion, sourceId }),
+        body: JSON.stringify({ question: trimmed, sourceId }),
       });
 
       const data = await res.json();
-      if (res.status === 402 && data?.error === "LIMIT_EXCEEDED") {
+
+      if (res.status === 402 && data.code === "LIMIT_EXCEEDED") {
         setLimitState({
           planRequired: data.plan_required || "pro",
-          message: data.message || "You reached your current plan limits.",
+          message: data.message || "Monthly question limit reached on your plan.",
         });
         return;
       }
-      if (!res.ok) throw new Error(data.error || "Failed to get answer");
-      setResponse(data);
-      setAskedQuestion(normalizedQuestion);
-      setEvidenceSearch("");
-      setActiveTagId("");
-      setRefactorResponse(null);
-      setRefactorError(null);
-      setFeedbackRating(null);
-      setFeedbackError(null);
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate answer.");
+      }
+
+      const askResp = data as AskResponse;
+      setActiveResponse(askResp);
+
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: askResp.answer,
+        response: askResp,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (err: any) {
-      setError(err.message);
+      const errorMessage: ChatMessage = {
+        id: `err-${Date.now()}`,
+        role: "assistant",
+        content: `Error: ${err.message || "Could not generate answer."}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFeedback = async (rating: "up" | "down") => {
-    if (!sourceId || !response || !askedQuestion || feedbackRating || feedbackLoading) {
-      return;
-    }
-
-    setFeedbackLoading(true);
-    setFeedbackError(null);
-
-    try {
-      const res = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sourceId,
-          query_text: askedQuestion,
-          answer_text: response.answer,
-          rating,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to submit feedback");
-      }
-
-      setFeedbackRating(rating);
-    } catch {
-      setFeedbackError("Unable to submit feedback right now.");
-    } finally {
-      setFeedbackLoading(false);
-    }
+  const handleAskSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    executeAsk(question);
   };
 
-  const handleGenerateRefactors = async () => {
-    if (!sourceId || !askedQuestion) return;
+  const handleRefactorRequest = async () => {
+    if (!activeResponse || !sourceId) return;
+    const lastUserQuery = messages.filter((m) => m.role === "user").slice(-1)[0]?.content || "";
+    if (!lastUserQuery) return;
 
+    setRefactorOpen(true);
     setRefactorLoading(true);
     setRefactorError(null);
 
@@ -594,372 +362,402 @@ function AskContent() {
       const res = await fetch("/api/refactor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId, question: askedQuestion }),
+        body: JSON.stringify({ question: lastUserQuery, sourceId }),
       });
-
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate refactor suggestions");
+      if (!res.ok) throw new Error(data.error || "Failed to generate refactor suggestions.");
       setRefactorResponse(data);
     } catch (err: any) {
-      setRefactorError(err.message);
+      setRefactorError(err.message || "Refactoring service error.");
     } finally {
       setRefactorLoading(false);
     }
   };
 
-  const handleLogout = async () => {
-    setLogoutLoading(true);
+  const handleFeedback = async (rating: "up" | "down") => {
+    if (!activeResponse?.sessionId || feedbackLoading) return;
+    setFeedbackLoading(true);
+    const lastUserQuery = messages.filter((m) => m.role === "user").slice(-1)[0]?.content || "";
+
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-      router.push("/login");
-      router.refresh();
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: activeResponse.sessionId,
+          query_text: lastUserQuery,
+          answer_text: activeResponse.answer,
+          rating,
+        }),
+      });
+      setFeedbackRating(rating);
+    } catch (err) {
+      console.error("Failed to send feedback:", err);
     } finally {
-      setLogoutLoading(false);
+      setFeedbackLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen overflow-x-hidden bg-[#151515]">
-    <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1.8fr)_minmax(320px,1fr)]">
-      <main className="min-w-0 space-y-6">
-        <header className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-4 sm:p-5">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => router.push("/ask")}
-              aria-label="Ingest new repository"
-              title="Ingest new repository"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-white/70 transition-colors hover:border-[#F04D26]/50 hover:text-white sm:h-10 sm:w-10"
-            >
-              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-lg font-semibold tracking-tight text-white sm:text-2xl lg:text-3xl">Ask Repo Lens</h1>
-              <p className="mt-0.5 text-xs text-slate-400 sm:mt-1 sm:text-sm">Ask natural-language questions and verify every answer with source evidence.</p>
-            </div>
-            <button
-              onClick={() => router.push(`/history?sourceId=${sourceId}`)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-[#111111] px-3 text-sm font-medium text-white/70 transition-colors hover:border-white/25 hover:text-white sm:h-10 sm:px-4"
-            >
-              <History className="h-4 w-4" />
-              <span className="hidden sm:inline">History</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              disabled={logoutLoading}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 px-3 text-sm font-medium text-red-300 transition-colors hover:border-red-500/45 hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:px-4"
-            >
-              {logoutLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-              <span className="hidden sm:inline">Logout</span>
-            </button>
+  const handleCopyAnswer = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedAnswer(true);
+    setTimeout(() => setCopiedAnswer(false), 2000);
+  };
+
+  // If no sourceId is provided, render repository selector
+  if (!sourceId) {
+    return (
+      <div className="min-h-screen bg-[#0e0e11] text-white">
+        <CohereNavbar />
+        <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+          <div className="mb-8 border-b border-white/[0.08] pb-6">
+            <span className="cohere-mono-label">QUERY ENGINE CONSOLE</span>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-white font-mono sm:text-3xl">
+              Ask Repository
+            </h1>
+            <p className="mt-1 text-xs text-white/60">
+              Select an indexed repository below to launch an interactive code intelligence interrogation session.
+            </p>
           </div>
-        </header>
 
-        <form onSubmit={handleAsk} className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5 shadow-[0_20px_60px_-32px_rgba(240,77,38,0.25)]">
-          <label htmlFor="repo-question" className="block text-sm font-medium text-white/70">
-            Question
-          </label>
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-              <input
-                id="repo-question"
-                type="text"
-                placeholder="Where is auth handled? How do retries work?"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                className="h-14 w-full rounded-xl border border-white/10 bg-[#0e0e0e] pl-12 pr-4 text-base text-white/90 placeholder:text-white/30 focus:border-[#F04D26]/50 focus:outline-none focus:ring-2 focus:ring-[#F04D26]/15"
-              />
+          {sourcesLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-white/60" />
+              <p className="font-mono text-xs text-white/50">Fetching repositories...</p>
             </div>
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              className="inline-flex h-14 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-[#F04D26] px-6 text-base font-semibold text-white transition-colors hover:bg-[#de4723] disabled:cursor-not-allowed disabled:bg-[#F04D26]/25 disabled:text-white/40"
-            >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Ask"}
-            </button>
-          </div>
-          <p className="mt-3 text-xs text-[#7d7d87]">Answers are grounded only in retrieved snippets and include file/line citations.</p>
-        </form>
-
-        {error ? (
-          <div className="rounded-xl border border-red-500/40 bg-red-900/20 p-4 text-sm text-red-200">{error}</div>
-        ) : null}
-
-        {response ? (
-          <div className="space-y-6">
-            <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
-              <h2 className="mb-4 border-b border-white/[0.07] pb-3 text-xl font-semibold text-white">Answer</h2>
-              {response.note_when_insufficient_evidence && !response.answer.trim() ? (
-                /* Insufficient evidence — render evidence as linked cards */
-                <div>
-                  <div className="mb-4 rounded-lg border border-[#F04D26]/30 bg-[#F04D26]/8 px-3 py-2.5 text-sm text-[#ff6e4a]">
-                    {response.note_when_insufficient_evidence}
+          ) : sources.length === 0 ? (
+            <div className="rounded-xl border border-white/10 bg-[#17171c] p-12 text-center">
+              <Database className="mx-auto mb-3 h-8 w-8 text-white/30" />
+              <h2 className="text-base font-semibold text-white">No Indexed Codebases</h2>
+              <p className="mt-1 text-xs text-white/60 max-w-md mx-auto">
+                Index a GitHub repository or upload a ZIP archive from the Dashboard to start querying with line citations.
+              </p>
+              <div className="mt-6">
+                <Link href="/dashboard" className="btn-cohere-primary">
+                  Go to Dashboard
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {sources.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => router.push(`/ask?sourceId=${s.id}`)}
+                  className="group rounded-xl border border-white/10 bg-[#141418] p-5 text-left transition-all hover:border-white/25 hover:bg-[#1a1a20]"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/80">
+                      {s.type === "github" ? <Github className="h-4 w-4" /> : <FileCode className="h-4 w-4" />}
+                    </div>
+                    {s.chunk_count !== undefined && (
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] text-white/60">
+                        {s.chunk_count} chunks
+                      </span>
+                    )}
                   </div>
-                  {response.retrievedSnippets.length > 0 && (
-                    <div className="mt-4 space-y-1">
-                      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#7d7d87]">Retrieved evidence</p>
-                      <div className="grid gap-3">
-                        {response.retrievedSnippets.map((s, i) => (
-                          <CitationCard key={`ev-${s.filePath}-${s.startLine}-${i}`} citation={s} />
-                        ))}
+
+                  <h3 className="mt-3 font-mono text-sm font-semibold text-white group-hover:text-[#ff7759] transition-colors truncate">
+                    {s.name}
+                  </h3>
+                  <p className="mt-1 font-mono text-[11px] text-white/40">
+                    Ready for semantic interrogation
+                  </p>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-3 text-xs font-medium text-white/70 group-hover:text-white">
+                    <span>Start Session</span>
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0e0e11] text-white">
+      <CohereNavbar />
+
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        {/* Header Bar */}
+        <div className="mb-6 flex flex-col justify-between gap-4 border-b border-white/[0.08] pb-6 sm:flex-row sm:items-end">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="cohere-mono-label">ACTIVE INTERROGATION REPO</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="font-mono text-[11px] text-emerald-400 uppercase tracking-wider">
+                Groq Llama 3.3 Active
+              </span>
+            </div>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-white font-mono sm:text-3xl">
+              {currentSource?.name || "Repository"}
+            </h1>
+            <p className="mt-1 text-xs text-white/60">
+              Query natural-language codebase semantics with verifiable line citations.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/history?sourceId=${encodeURIComponent(sourceId)}`}
+              className="btn-cohere-outline !py-1.5 text-xs"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span>Query History</span>
+            </Link>
+            <Link
+              href="/dashboard"
+              className="btn-cohere-outline !py-1.5 text-xs"
+            >
+              Dashboard
+            </Link>
+          </div>
+        </div>
+
+        {/* Conversation Message List */}
+        <div className="space-y-6 min-h-[350px]">
+          {messages.length === 0 ? (
+            <div className="rounded-xl border border-white/10 bg-[#17171c] p-8 text-center sm:p-12">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/80">
+                <Code2 className="h-6 w-6 text-[#ff7759]" />
+              </div>
+              <h2 className="text-base font-bold text-white font-mono">
+                Ask anything about {currentSource?.name || "this codebase"}
+              </h2>
+              <p className="mt-1.5 text-xs text-white/60 max-w-md mx-auto leading-relaxed">
+                All answers are synthesized strictly from indexed file chunks with pinpoint line-range citations.
+              </p>
+
+              {/* Suggested Questions Chips */}
+              <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-2xl mx-auto">
+                {suggestedQuestions.map((sq, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => executeAsk(sq)}
+                    className="btn-cohere-outline !py-1.5 !px-3 text-xs text-left"
+                  >
+                    <span>{sq}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`rounded-xl border p-5 transition-all ${
+                  msg.role === "user"
+                    ? "border-white/15 bg-[#141418]"
+                    : "border-white/10 bg-[#17171c]"
+                }`}
+              >
+                {/* Message Header */}
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2.5 text-xs">
+                  <div className="flex items-center gap-2 font-mono">
+                    <span
+                      className={`cohere-mono-label text-[10px] ${
+                        msg.role === "user" ? "text-white/60" : "text-[#ff7759]"
+                      }`}
+                    >
+                      {msg.role === "user" ? "QUERY" : "VERIFIED RESPONSE"}
+                    </span>
+                    <span className="text-white/20">•</span>
+                    <span className="text-white/40 text-[11px]">{msg.timestamp}</span>
+                  </div>
+
+                  {msg.role === "assistant" && (
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAnswer(msg.content)}
+                        className="inline-flex items-center gap-1 font-mono text-[11px] text-white/60 hover:text-white transition-colors"
+                      >
+                        {copiedAnswer ? (
+                          <>
+                            <Check className="h-3 w-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Feedback buttons */}
+                      <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+                        <button
+                          type="button"
+                          onClick={() => handleFeedback("up")}
+                          disabled={feedbackLoading}
+                          className={`p-1 rounded hover:bg-white/10 ${
+                            feedbackRating === "up" ? "text-emerald-400" : "text-white/50"
+                          }`}
+                          title="Accurate and helpful"
+                        >
+                          <ThumbsUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleFeedback("down")}
+                          disabled={feedbackLoading}
+                          className={`p-1 rounded hover:bg-white/10 ${
+                            feedbackRating === "down" ? "text-red-400" : "text-white/50"
+                          }`}
+                          title="Inaccurate or incomplete"
+                        >
+                          <ThumbsDown className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   )}
                 </div>
-              ) : (
-                <>
-                  <div className="min-w-0 overflow-x-auto">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                      {response.answer}
-                    </ReactMarkdown>
-                  </div>
-                  <div className="mt-5 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleFeedback("up")}
-                      disabled={feedbackLoading || feedbackRating !== null}
-                      className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-white/80 transition-colors hover:border-[#F04D26]/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <ThumbsUp className="h-4 w-4" />
-                      Helpful
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleFeedback("down")}
-                      disabled={feedbackLoading || feedbackRating !== null}
-                      className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#111111] px-3 py-2 text-sm text-white/80 transition-colors hover:border-[#F04D26]/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <ThumbsDown className="h-4 w-4" />
-                      Needs work
-                    </button>
-                    {feedbackLoading ? (
-                      <span className="inline-flex items-center gap-2 text-xs text-white/60">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Saving feedback...
-                      </span>
-                    ) : null}
-                    {feedbackRating ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
-                        <Check className="h-3.5 w-3.5" />
-                        Feedback submitted
-                      </span>
-                    ) : null}
-                  </div>
-                  {feedbackError ? <p className="mt-2 text-xs text-red-300">{feedbackError}</p> : null}
-                  {response.note_when_insufficient_evidence ? (
-                    <div className="mt-4 rounded-lg border border-[#F04D26]/30 bg-[#F04D26]/8 px-3 py-2 text-sm text-[#ff6e4a]">
-                      {response.note_when_insufficient_evidence}
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </section>
 
-            <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
-              <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-                <ExternalLink className="h-5 w-5 text-[#F04D26]" />
-                Citations
-              </h3>
-              {filteredCitations.length > 0 ? (
-                <div className="grid gap-3 md:grid-cols-2">
-                  {filteredCitations.map((citation, index) => (
-                    <CitationCard key={`${citation.filePath}-${citation.startLine}-${index}`} citation={citation} />
-                  ))}
-                </div>
-              ) : response.citations.length > 0 ? (
-                <p className="text-sm text-slate-400">No citations match the current search.</p>
-              ) : (
-                <p className="text-sm text-slate-400">No direct citations available for this answer.</p>
-              )}
-            </section>
-
-            <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-6">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
-                  <Wand2 className="h-5 w-5 text-[#F04D26]" />
-                  Refactor Suggestions
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleGenerateRefactors}
-                  disabled={refactorLoading || response.retrievedSnippets.length === 0}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#F04D26]/40 bg-[#F04D26]/8 px-3 text-sm font-medium text-[#F04D26] transition-colors hover:bg-[#F04D26]/15 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[#1a1a1a] disabled:text-white/30"
-                >
-                  {refactorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                  Generate Suggestions
-                </button>
-              </div>
-
-              {refactorError ? (
-                <p className="mb-4 rounded-lg border border-red-500/40 bg-red-900/20 p-3 text-sm text-red-200">
-                  {refactorError}
-                </p>
-              ) : null}
-
-              {refactorResponse?.suggestions?.length ? (
-                <div className="space-y-4">
-                  {refactorResponse.suggestions.map((suggestion, index) => (
-                    <article key={`${suggestion.title}-${index}`} className="rounded-xl border border-white/[0.07] bg-[#111111] p-4">
-                      <h4 className="text-base font-semibold text-white">{suggestion.title}</h4>
-                      <p className="mt-2 text-sm text-white/75">{suggestion.rationale}</p>
-                      <p className="mt-2 text-sm text-[#7d7d87]">
-                        <span className="font-semibold text-white/70">Impact:</span> {suggestion.expectedImpact}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {suggestion.citations.map((citation, citationIndex) =>
-                          citation.sourceUrl ? (
-                            <a
-                              key={`${citation.filePath}-${citation.startLine}-${citationIndex}`}
-                              href={citation.sourceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex max-w-[220px] items-center gap-1 rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-[#F04D26] hover:border-[#F04D26]/50"
-                              title={`${citation.filePath} L${citation.startLine}-L${citation.endLine}`}
-                            >
-                              <span className="truncate">{citation.filePath}</span>
-                              <span className="shrink-0"> L{citation.startLine}-L{citation.endLine}</span>
-                              <ExternalLink className="h-3 w-3 shrink-0" />
-                            </a>
-                          ) : (
-                            <span
-                              key={`${citation.filePath}-${citation.startLine}-${citationIndex}`}
-                              className="inline-flex max-w-[220px] items-center rounded-md border border-white/10 bg-[#0e0e0e] px-2 py-1 text-xs text-white/60"
-                              title={`${citation.filePath} L${citation.startLine}-L${citation.endLine}`}
-                            >
-                              <span className="truncate">{citation.filePath}</span>
-                              <span className="shrink-0"> L{citation.startLine}-L{citation.endLine}</span>
-                            </span>
-                          ),
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : refactorResponse?.note_when_insufficient_evidence ? (
-                <p className="text-sm text-slate-400">{refactorResponse.note_when_insufficient_evidence}</p>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  Generate grounded refactor ideas based on the currently retrieved evidence.
-                </p>
-              )}
-            </section>
-          </div>
-        ) : (
-          <section className="rounded-2xl border border-dashed border-white/10 bg-[#1a1a1a]/40 p-8 text-center text-[#7d7d87]">
-            Ask a question to see a grounded answer, citations, and retrieved snippets.
-          </section>
-        )}
-      </main>
-
-      <aside className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
-        {/* Mobile/tablet collapsible toggle */}
-        <button
-          type="button"
-          onClick={() => setEvidenceExpanded((v) => !v)}
-          className="mb-3 flex w-full items-center justify-between rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-4 lg:hidden"
-        >
-          <span className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Code2 className="h-4 w-4 text-[#F04D26]" />
-            Retrieved Evidence
-            {response ? (
-              <span className="rounded-full bg-[#F04D26]/20 px-1.5 py-0.5 text-xs font-medium text-[#F04D26]">
-                {filteredSnippets.length}
-              </span>
-            ) : null}
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 text-white/50 transition-transform duration-200 ${evidenceExpanded ? "rotate-180" : ""}`}
-          />
-        </button>
-        <div className={`${evidenceExpanded ? "block" : "hidden"} lg:block`}>
-        <section className="rounded-2xl border border-white/[0.07] bg-[#1a1a1a] p-5">
-          <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-            <Code2 className="h-5 w-5 text-[#F04D26]" />
-            Retrieved Evidence
-          </h3>
-          {response ? (
-            <div className="mb-4">
-              <label htmlFor="evidence-search" className="block text-xs font-semibold uppercase tracking-wide text-[#7d7d87]">
-                Search Evidence
-              </label>
-              <input
-                id="evidence-search"
-                type="text"
-                placeholder="Filter by file or snippet text"
-                value={evidenceSearch}
-                onChange={(e) => setEvidenceSearch(e.target.value)}
-                className="mt-2 h-10 w-full rounded-lg border border-white/10 bg-[#0e0e0e] px-3 text-sm text-white/90 placeholder:text-white/30 focus:border-[#F04D26]/50 focus:outline-none focus:ring-2 focus:ring-[#F04D26]/15"
-              />
-              {evidenceTags.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {evidenceTags.map((tag) => {
-                    const isActive = tag.id === activeTagId;
-                    return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => setActiveTagId(isActive ? "" : tag.id)}
-                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                          isActive
-                            ? "border-[#F04D26]/60 bg-[#F04D26]/15 text-[#F04D26]"
-                            : "border-white/10 bg-[#111111] text-white/60 hover:border-white/20"
-                        }`}
+                {/* Message Body */}
+                <div className="mt-3">
+                  {msg.role === "user" ? (
+                    <p className="text-sm font-semibold text-white leading-relaxed font-mono">
+                      {msg.content}
+                    </p>
+                  ) : (
+                    <div className="prose prose-invert max-w-none text-xs leading-relaxed text-white/90">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code: CodeBlock as any,
+                        }}
                       >
-                        {tag.label}
-                        <span className="rounded-full bg-[#1a1a1a] px-1.5 py-0.5 text-[10px]">
-                          {tag.count}
-                        </span>
-                      </button>
-                    );
-                  })}
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </div>
-              ) : null}
-              <p className="mt-2 text-xs text-[#7d7d87]">
-                Showing {filteredSnippets.length} of {response.retrievedSnippets.length} snippets.
+
+                {/* Evidence & Action Bar for Assistant */}
+                {msg.role === "assistant" && msg.response && (
+                  <div className="mt-5 border-t border-white/[0.06] pt-4 space-y-3">
+                    {/* Citations Chips */}
+                    {msg.response.citations && msg.response.citations.length > 0 && (
+                      <div>
+                        <span className="cohere-mono-label text-[10px]">PINPOINT CITATIONS:</span>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {msg.response.citations.map((c, idx) => (
+                            <Link
+                              key={idx}
+                              href={`/source?sourceId=${encodeURIComponent(sourceId)}&path=${encodeURIComponent(
+                                c.filePath,
+                              )}#L${c.startLine}-L${c.endLine}`}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] text-white/80 hover:border-white/30 hover:bg-white/10 transition-colors"
+                            >
+                              <FileCode className="h-3 w-3 text-[#ff7759]" />
+                              <span className="truncate max-w-[200px]">{c.filePath}</span>
+                              <span className="text-white/40">:{c.startLine}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions Row */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleRefactorRequest}
+                        className="btn-cohere-outline !py-1 text-xs"
+                      >
+                        <Wand2 className="h-3.5 w-3.5 text-[#ff7759]" />
+                        <span>Suggest Refactor Diffs</span>
+                      </button>
+
+                      {msg.response.confidence !== undefined && (
+                        <div className="flex items-center gap-2 font-mono text-[11px] text-white/40">
+                          <span>Confidence:</span>
+                          <span
+                            className={`rounded-full px-2 py-0.2 uppercase text-[10px] font-semibold ${
+                              msg.response.confidence >= 0.7
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : "bg-amber-500/10 text-amber-400"
+                            }`}
+                          >
+                            {msg.response.confidence >= 0.7 ? "High" : "Moderate"}{" "}
+                            ({Math.round(msg.response.confidence <= 1 ? msg.response.confidence * 100 : msg.response.confidence)}%)
+                          </span>
+                          {msg.response.latencyMs && (
+                            <span className="text-white/30">({msg.response.latencyMs}ms)</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+
+          {/* Loading Indicator */}
+          {loading && (
+            <div className="rounded-xl border border-white/10 bg-[#17171c] p-6 text-center">
+              <Loader2 className="mx-auto h-6 w-6 animate-spin text-white/70" />
+              <p className="mt-2 text-xs font-mono text-white/60">
+                Retrieving semantic embeddings and synthesizing answer...
               </p>
             </div>
-          ) : null}
-          {filteredSnippets.length ? (
-            <div className="space-y-4">
-              {filteredSnippets.map((snippet, index) => (
-                <article key={`${snippet.filePath}-${snippet.startLine}-${index}`} className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#111111]">
-                  <header className="flex items-center justify-between gap-2 border-b border-white/[0.06] bg-[#0e0e0e] px-3 py-2">
-                    <span className="truncate font-mono text-xs font-semibold text-white/85">{snippet.filePath}</span>
-                    <span className="shrink-0 rounded bg-[#1a1a1a] px-2 py-1 text-[11px] text-white/55">
-                      L{snippet.startLine}-L{snippet.endLine}
-                    </span>
-                  </header>
-                  <pre className="max-h-64 overflow-auto p-3 text-xs leading-5 text-white/75">
-                    <code>{snippet.snippet}</code>
-                  </pre>
-                  {snippet.sourceUrl ? (
-                    <a
-                      href={snippet.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 border-t border-white/[0.06] px-3 py-2 text-xs font-medium text-[#F04D26] transition-colors hover:text-[#ff6e4a]"
-                    >
-                      Open source <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          ) : response ? (
-            <p className="rounded-lg border border-dashed border-white/10 bg-[#111111] p-4 text-sm text-[#7d7d87]">
-              No snippets match the current search.
-            </p>
-          ) : (
-            <p className="rounded-lg border border-dashed border-white/10 bg-[#111111] p-4 text-sm text-[#7d7d87]">
-              Retrieved snippets will appear here after you submit a question.
-            </p>
           )}
-        </section>
         </div>
-      </aside>
-    </div>
-    {limitState ? <UpgradeModal state={limitState} onClose={() => setLimitState(null)} /> : null}
+
+        {/* Input Bar (Sticky at Bottom) */}
+        <div className="sticky bottom-6 mt-8">
+          <form
+            onSubmit={handleAskSubmit}
+            className="rounded-2xl border border-white/15 bg-[#17171c]/95 p-3 shadow-2xl backdrop-blur-xl"
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask about this codebase (e.g. How does error handling work?)..."
+                disabled={loading}
+                className="flex-1 bg-transparent px-3 py-2 text-xs text-white placeholder-white/40 outline-none"
+              />
+
+              <button
+                type="submit"
+                disabled={!question.trim() || loading}
+                className="btn-cohere-primary shrink-0 !py-2 !px-5 text-xs"
+              >
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <span>Submit</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </main>
+
+      {/* Upgrade Modal */}
+      {limitState && <UpgradeModal state={limitState} onClose={() => setLimitState(null)} />}
+
+      {/* Refactor Suggestions Modal */}
+      {refactorOpen && (
+        <RefactorModal
+          refactorResponse={refactorResponse}
+          loading={refactorLoading}
+          error={refactorError}
+          onClose={() => setRefactorOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -968,8 +766,8 @@ export default function AskPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#151515]">
-          <Loader2 className="h-8 w-8 animate-spin text-[#F04D26]" />
+        <div className="min-h-screen bg-[#0e0e11] text-white flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-white/60" />
         </div>
       }
     >
