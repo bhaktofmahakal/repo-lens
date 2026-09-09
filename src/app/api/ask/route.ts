@@ -116,16 +116,20 @@ function selectFallbackSnippets(
 function buildEvidenceBackedFallbackAnswer(
   question: string,
   snippets: ReturnType<typeof formatRetrievedSnippets>,
+  sourceId?: string,
 ): string {
   const selectedSnippets = selectFallbackSnippets(question, snippets);
   const lines = selectedSnippets
-    .map(
-      (snippet) =>
-        `- [${snippet.filePath}:L${snippet.startLine}-L${snippet.endLine}] ${buildSnippetPreview(snippet.snippet)}`,
-    )
+    .map((snippet) => {
+      const lineHash = snippet.endLine ? `#L${snippet.startLine}-L${snippet.endLine}` : `#L${snippet.startLine}`;
+      const targetUrl = snippet.sourceUrl || (sourceId ? `/source?sourceId=${encodeURIComponent(sourceId)}&path=${encodeURIComponent(snippet.filePath)}${lineHash}` : null);
+      const citationLabel = `[${snippet.filePath}:L${snippet.startLine}-L${snippet.endLine}]`;
+      const linkMarkdown = targetUrl ? `[${citationLabel}](${targetUrl})` : citationLabel;
+      return `- ${linkMarkdown} ${buildSnippetPreview(snippet.snippet)}`;
+    })
     .join("\n");
 
-  return `I could not generate a full narrative answer, but relevant evidence was retrieved for "${question}":\n${lines}\n\nUse these cited files and line ranges to verify the exact flow.`;
+  return `Relevant evidence was retrieved for "${question}":\n\n${lines}\n\nUse the cited files and line ranges above or the pinpoint citations below to verify the flow.`;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -211,7 +215,7 @@ export async function POST(req: NextRequest) {
         answer.trim().toLowerCase().startsWith(INSUFFICIENT_EVIDENCE_PREFIX) &&
         retrievedSnippets.length > 0
       ) {
-        answer = buildEvidenceBackedFallbackAnswer(normalizedQuestion, retrievedSnippets);
+        answer = buildEvidenceBackedFallbackAnswer(normalizedQuestion, retrievedSnippets, String(sourceId));
       }
 
       if (citations.length === 0) {

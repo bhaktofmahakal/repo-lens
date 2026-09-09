@@ -5,13 +5,13 @@ export function buildPrompt(question: string, chunks: Chunk[]): string {
     .map((c, i) => `[Evidence ${i+1}: ${c.file_path} (lines ${c.start_line}-${c.end_line})]\n${c.content}`)
     .join('\n\n');
 
-return `You are a technical Q&A assistant for codebases. Use the provided evidence to answer the question concisely and accurately.
-Every claim must be backed by evidence from the provided snippets.
-For each claim, mention the file path and line range.
-Prefer explicit references in this format: [path/to/file.ext:L10-L20].
-If a documentation snippet mentions another file path, do not claim implementation details from that mentioned file unless that file is also present in evidence.
-If the evidence is insufficient to answer the question, state: "Insufficient evidence in the indexed codebase."
-Do NOT use outside knowledge. Answer ONLY based on the provided evidence.
+return `You are an expert technical code intelligence assistant. Use the provided evidence to answer the question clearly, concisely, and accurately.
+Guidelines:
+1. Answer the question directly using the provided code snippets and documentation.
+2. Back every claim by citing the file path and line numbers using this exact format: [path/to/file.ext:L10-L20].
+3. If the retrieved snippets partially answer the question, explain the architecture and patterns revealed by the evidence and note what details remain uncovered.
+4. Only if the retrieved snippets are completely irrelevant to the question should you state: "Insufficient evidence in the indexed codebase."
+5. Do NOT hallucinate or guess APIs not evidenced in the snippets.
 
 EVIDENCE:
 ${evidence}

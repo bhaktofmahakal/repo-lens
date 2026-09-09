@@ -41,7 +41,9 @@ import {
   QuerySynthesisLoader,
   RefactorAnalysisLoader,
   FullPageCyberLoader,
+  RepoGridLoader,
 } from "@/components/ui/EngagingLoaders";
+import { linkifyCitations } from "@/lib/qa/citations";
 
 type EvidenceTag = {
   id: string;
@@ -711,9 +713,8 @@ function AskContent() {
           </div>
 
           {sourcesLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-white/60" />
-              <p className="font-mono text-xs text-white/50">Fetching repositories...</p>
+            <div className="py-4">
+              <RepoGridLoader />
             </div>
           ) : sources.length === 0 ? (
             <div className="rounded-xl border border-white/10 bg-[#17171c] p-12 text-center">
@@ -980,9 +981,28 @@ function AskContent() {
                         remarkPlugins={[remarkGfm]}
                         components={{
                           code: CodeBlock as any,
+                          a: ({ href, children, ...props }) => {
+                            const isInternalSource = href?.startsWith("/source") || href?.includes("github.com");
+                            return (
+                              <a
+                                href={href}
+                                target={isInternalSource ? "_blank" : undefined}
+                                rel="noopener noreferrer"
+                                className={
+                                  isInternalSource
+                                    ? "inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-[#ff7759] hover:text-[#ff927a] bg-[#ff7759]/10 hover:bg-[#ff7759]/20 px-1.5 py-0.5 rounded border border-[#ff7759]/25 transition-colors no-underline"
+                                    : "text-[#ff7759] underline hover:text-[#ff927a]"
+                                }
+                                {...props}
+                              >
+                                {isInternalSource && <FileCode className="inline h-3 w-3 mr-0.5 text-[#ff7759]" />}
+                                {children}
+                              </a>
+                            );
+                          },
                         }}
                       >
-                        {msg.content}
+                        {linkifyCitations(msg.content, sourceId, msg.response?.citations)}
                       </ReactMarkdown>
                     </div>
                   )}

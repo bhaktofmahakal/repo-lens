@@ -126,9 +126,23 @@ function StatusContent() {
 
         {/* Cards Grid */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-white/60" />
-            <p className="font-mono text-xs text-white/50">Querying platform endpoints...</p>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3 py-4">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-white/10 bg-[#141418] p-5 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="h-9 w-9 rounded-lg bg-white/10 animate-pulse" />
+                  <div className="h-4 w-16 rounded-full bg-white/10 animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 w-28 rounded bg-white/20 animate-pulse" />
+                  <div className="h-3 w-40 rounded bg-white/10 animate-pulse" />
+                </div>
+                <div className="h-2 rounded bg-white/10 w-full animate-pulse" />
+              </div>
+            ))}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">

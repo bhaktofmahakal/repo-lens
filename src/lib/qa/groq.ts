@@ -6,13 +6,24 @@ const RESOLVED_GROQ_API_KEY = GROQ_API_KEY || "placeholder";
 
 const groq = new Groq({ apiKey: RESOLVED_GROQ_API_KEY });
 
-export const PRIMARY_GROQ_MODEL = process.env.GROQ_MODEL_ID || "llama-3.3-70b-versatile";
+export const PRIMARY_GROQ_MODEL = process.env.GROQ_MODEL_ID || "qwen/qwen3.8-27b";
 export const FALLBACK_GROQ_MODELS = [
   PRIMARY_GROQ_MODEL,
+  "qwen/qwen3.8-27b",
+  "groq/compound-mini",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.6-27b",
+  "groq/compound",
   "llama-3.3-70b-versatile",
   "llama-3.1-8b-instant",
-  "mixtral-8x7b-32768",
 ];
+
+export function cleanModelResponse(text: string): string {
+  if (!text) return "";
+  // Strip reasoning/thought wrappers (e.g. <think>...</think>) from reasoning models
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
 
 export function isGroqConfigured(): boolean {
   return isConfiguredEnvValue(GROQ_API_KEY);
@@ -52,7 +63,7 @@ export async function generateAnswer(prompt: string): Promise<string> {
           {
             role: "system",
             content:
-              "You are an enterprise code intelligence assistant. Answer ONLY using the provided evidence. Be concise, direct, accurate, and provide code references with exact line citations where relevant.",
+              "You are an enterprise code intelligence assistant. Answer directly and technically using the provided evidence. Cite files and exact line numbers like [path/file.ext:L10-L20].",
           },
           {
             role: "user",
@@ -64,15 +75,63 @@ export async function generateAnswer(prompt: string): Promise<string> {
         max_tokens: 2048,
       });
 
-      return completion.choices[0]?.message?.content || "No answer generated.";
+      const raw = completion.choices[0]?.message?.content || "";
+      const cleaned = cleanModelResponse(raw);
+      if (cleaned) {
+        return cleaned;
+      }
     } catch (error: any) {
       lastError = error;
       console.warn(`Groq completion failed with model ${model}:`, error?.message || error);
-      // If error is due to model deprecation/not found, try next model in fallback chain
       continue;
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  // Dynamic discovery fallback: query available models from the account
+  try {
+    const modelList = await groq.models.list();
+    const availableChatModels = modelList.data
+      .map((m) => m.id)
+      .filter(
+        (id) =>
+          !id.includes("whisper") &&
+          !id.includes("guard") &&
+          !id.includes("orpheus") &&
+          !candidateModels.includes(id),
+      );
+
+    for (const model of availableChatModels) {
+      try {
+        const completion = await groq.chat.completions.create({
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an enterprise code intelligence assistant. Answer directly and technically using the provided evidence. Cite files and exact line numbers like [path/file.ext:L10-L20].",
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          model,
+          temperature: 0.1,
+          max_tokens: 2048,
+        });
+
+        const raw = completion.choices[0]?.message?.content || "";
+        const cleaned = cleanModelResponse(raw);
+        if (cleaned) {
+          return cleaned;
+        }
+      } catch (err) {
+        console.warn(`Dynamic Groq fallback model ${model} failed:`, err);
+      }
+    }
+  } catch (discoveryErr) {
+    console.warn("Failed to dynamically list Groq models:", discoveryErr);
   }
 
   throw lastError || new Error("Failed to generate answer with all available Groq models.");
