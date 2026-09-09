@@ -14,17 +14,21 @@ import {
   Code2,
   Copy,
   Database,
+  Download,
   ExternalLink,
   FileCode,
   Github,
+  Globe,
   History,
   Layers,
   Loader2,
   MessageSquare,
   Search,
+  Share2,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
   Upload,
   Wand2,
   X,
@@ -148,13 +152,39 @@ function RefactorModal({
   refactorResponse,
   loading,
   error,
+  sourceId,
   onClose,
 }: {
   refactorResponse: RefactorResponse | null;
   loading: boolean;
   error: string | null;
+  sourceId?: string;
   onClose: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyPlan = () => {
+    if (!refactorResponse?.suggestions) return;
+    let plan = `# Code Architecture Refactor Suggestions\n\n`;
+    refactorResponse.suggestions.forEach((sug, i) => {
+      plan += `## ${i + 1}. ${sug.title}\n\n`;
+      plan += `**Rationale:** ${sug.rationale}\n\n`;
+      if (sug.expectedImpact) {
+        plan += `**Expected Impact:** ${sug.expectedImpact}\n\n`;
+      }
+      if (sug.citations?.length) {
+        plan += `**Citations:**\n`;
+        sug.citations.forEach((c) => {
+          plan += `- \`${c.filePath}:${c.startLine}-${c.endLine}\`\n`;
+        });
+        plan += `\n`;
+      }
+    });
+    navigator.clipboard.writeText(plan);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
       <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-white/15 bg-[#17171c] shadow-2xl overflow-hidden">
@@ -196,14 +226,20 @@ function RefactorModal({
                   </div>
                 )}
                 {sug.citations && sug.citations.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-white/[0.06]">
+                    <span className="cohere-mono-label text-[9px] text-white/40">EVIDENCE:</span>
                     {sug.citations.map((c, cIdx) => (
-                      <span
+                      <Link
                         key={cIdx}
-                        className="inline-flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/60"
+                        href={`/source?sourceId=${encodeURIComponent(sourceId || "")}&path=${encodeURIComponent(c.filePath)}#L${c.startLine}-L${c.endLine}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] text-[#ff7759] hover:border-white/30 hover:bg-white/10 transition-colors"
                       >
-                        {c.filePath}:{c.startLine}-{c.endLine}
-                      </span>
+                        <FileCode className="h-3 w-3" />
+                        <span>{c.filePath}:{c.startLine}-{c.endLine}</span>
+                        <ExternalLink className="h-2.5 w-2.5 text-white/40" />
+                      </Link>
                     ))}
                   </div>
                 )}
@@ -213,6 +249,227 @@ function RefactorModal({
             <div className="py-8 text-center text-xs text-white/50 font-mono">
               No refactor suggestions generated for this scope.
             </div>
+          )}
+        </div>
+
+        <div className="border-t border-white/10 px-6 py-3 bg-[#141418] flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleCopyPlan}
+            disabled={!refactorResponse?.suggestions?.length}
+            className="btn-cohere-outline !py-1 text-xs"
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+            <span>{copied ? "Copied Plan" : "Copy Refactor Plan"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-cohere-primary !py-1 text-xs"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShareModal({
+  sourceId,
+  sourceName,
+  onClose,
+}: {
+  sourceId: string;
+  sourceName?: string;
+  onClose: () => void;
+}) {
+  const [shareState, setShareState] = useState<{
+    shared: boolean;
+    share_url?: string;
+    share_uuid?: string;
+    view_count?: number;
+  }>({ shared: false });
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadShare() {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/share?sourceId=${encodeURIComponent(sourceId)}`);
+        const data = await res.json();
+        if (data && data.shared) {
+          setShareState(data);
+        } else {
+          setShareState({ shared: false });
+        }
+      } catch (err: any) {
+        setError(err.message || "Failed to load share state");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadShare();
+  }, [sourceId]);
+
+  const handleCreateShare = async () => {
+    try {
+      setActionLoading(true);
+      setError(null);
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId, is_public: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create share link");
+      setShareState({
+        shared: true,
+        share_url: data.share_url,
+        share_uuid: data.share_uuid,
+        view_count: data.view_count || 0,
+      });
+    } catch (err: any) {
+      setError(err.message || "Failed to create share link");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRevokeShare = async () => {
+    try {
+      setActionLoading(true);
+      setError(null);
+      const res = await fetch(`/api/share?sourceId=${encodeURIComponent(sourceId)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to revoke share link");
+      }
+      setShareState({ shared: false });
+    } catch (err: any) {
+      setError(err.message || "Failed to revoke share link");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (!shareState.share_url) return;
+    navigator.clipboard.writeText(shareState.share_url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+      <div className="w-full max-w-lg rounded-xl border border-white/15 bg-[#17171c] shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-[#ff7759]" />
+            <h3 className="text-base font-bold text-white font-mono">Public Session Sharing</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-white/50 hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-white/60" />
+              <span className="text-xs font-mono text-white/40">Checking share status...</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-white/70 leading-relaxed">
+                Generate a public view-only link for {sourceName ? <strong className="text-white">{sourceName}</strong> : "this session"}. Anyone with the link will be able to read past inquiries and verified citations without authenticating.
+              </p>
+
+              {error && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-300 font-mono">
+                  {error}
+                </div>
+              )}
+
+              {shareState.shared && shareState.share_url ? (
+                <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-400">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Active Public Share Link
+                    </span>
+                    {shareState.view_count !== undefined && (
+                      <span className="font-mono text-[10px] text-white/40">
+                        {shareState.view_count} views
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={shareState.share_url}
+                      className="flex-1 rounded-lg border border-white/10 bg-[#101014] px-3 py-2 font-mono text-xs text-white/90 select-all focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyLink}
+                      className="btn-cohere-primary shrink-0 !py-2 text-xs"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span>{copied ? "Copied!" : "Copy"}</span>
+                    </button>
+                  </div>
+
+                  <div className="pt-2 flex justify-between items-center text-[11px]">
+                    <a
+                      href={shareState.share_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[#ff7759] hover:underline font-mono"
+                    >
+                      <span>Open public view</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={handleRevokeShare}
+                      disabled={actionLoading}
+                      className="text-red-400 hover:text-red-300 transition-colors font-mono"
+                    >
+                      Revoke Link
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-white/10 bg-[#141418] p-5 text-center">
+                  <Globe className="mx-auto mb-2 h-7 w-7 text-white/30" />
+                  <h4 className="text-xs font-semibold text-white font-mono">No Active Public Link</h4>
+                  <p className="mt-1 text-[11px] text-white/50">
+                    Create an encrypted share token to publish this repository Q&A session.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleCreateShare}
+                    disabled={actionLoading}
+                    className="btn-cohere-primary mt-4 mx-auto !py-2 text-xs"
+                  >
+                    {actionLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    <span>Generate Public Share Link</span>
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -253,6 +510,69 @@ function AskContent() {
   const [feedbackRating, setFeedbackRating] = useState<"up" | "down" | null>(null);
   const [limitState, setLimitState] = useState<LimitState | null>(null);
   const [copiedAnswer, setCopiedAnswer] = useState(false);
+
+  // Sharing & Export states
+  const [shareOpen, setShareOpen] = useState(false);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+
+  const handleExportMarkdown = () => {
+    if (messages.length === 0) return;
+    const repoName = currentSource?.name || "codebase";
+    const dateStr = new Date().toISOString().split("T")[0];
+    let md = `# RepoLens Q&A Session - ${repoName}\n\n`;
+    md += `*Exported on ${new Date().toLocaleString()}*\n\n---\n\n`;
+
+    messages.forEach((msg, idx) => {
+      if (msg.role === "user") {
+        md += `### Q${Math.floor(idx / 2) + 1}: ${msg.content}\n\n`;
+      } else {
+        md += `**Answer:**\n\n${msg.content}\n\n`;
+        if (msg.response?.citations && msg.response.citations.length > 0) {
+          md += `**Citations:**\n`;
+          msg.response.citations.forEach((c) => {
+            md += `- \`${c.filePath}:${c.startLine}-${c.endLine}\`\n`;
+          });
+          md += `\n`;
+        }
+        md += `---\n\n`;
+      }
+    });
+
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `repolens-session-${repoName.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${dateStr}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportDropdownOpen(false);
+  };
+
+  const handleExportJson = () => {
+    if (messages.length === 0) return;
+    const repoName = currentSource?.name || "codebase";
+    const dateStr = new Date().toISOString().split("T")[0];
+    const data = {
+      repository: repoName,
+      sourceId,
+      exportedAt: new Date().toISOString(),
+      messages,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `repolens-session-${repoName.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportDropdownOpen(false);
+  };
+
+  const handleClearSession = () => {
+    if (messages.length === 0) return;
+    setMessages([]);
+    setActiveResponse(null);
+  };
 
   // Load user sources
   useEffect(() => {
@@ -501,7 +821,65 @@ function AskContent() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="btn-cohere-outline !py-1.5 text-xs text-emerald-400 border-emerald-500/30 hover:border-emerald-500/50"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span>Share Session</span>
+            </button>
+
+            {/* Export Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                disabled={messages.length === 0}
+                className="btn-cohere-outline !py-1.5 text-xs disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Export</span>
+                <ChevronDown className="h-3 w-3 text-white/40" />
+              </button>
+
+              {exportDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setExportDropdownOpen(false)} />
+                  <div className="absolute right-0 top-full z-30 mt-1.5 w-48 rounded-xl border border-white/15 bg-[#17171c] p-1 shadow-2xl backdrop-blur-xl">
+                    <button
+                      type="button"
+                      onClick={handleExportMarkdown}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-white/80 hover:bg-white/10 hover:text-white"
+                    >
+                      <FileCode className="h-3.5 w-3.5 text-[#ff7759]" />
+                      <span>Export as Markdown (.md)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportJson}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-white/80 hover:bg-white/10 hover:text-white"
+                    >
+                      <Code2 className="h-3.5 w-3.5 text-blue-400" />
+                      <span>Export as JSON</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearSession}
+                className="btn-cohere-outline !py-1.5 text-xs text-white/50 hover:text-red-400 hover:border-red-500/30"
+                title="Clear conversation"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+
             <Link
               href={`/history?sourceId=${encodeURIComponent(sourceId)}`}
               className="btn-cohere-outline !py-1.5 text-xs"
@@ -509,6 +887,7 @@ function AskContent() {
               <History className="h-3.5 w-3.5" />
               <span>Query History</span>
             </Link>
+
             <Link
               href="/dashboard"
               className="btn-cohere-outline !py-1.5 text-xs"
@@ -755,7 +1134,17 @@ function AskContent() {
           refactorResponse={refactorResponse}
           loading={refactorLoading}
           error={refactorError}
+          sourceId={sourceId}
           onClose={() => setRefactorOpen(false)}
+        />
+      )}
+
+      {/* Public Share Modal */}
+      {shareOpen && (
+        <ShareModal
+          sourceId={sourceId}
+          sourceName={currentSource?.name}
+          onClose={() => setShareOpen(false)}
         />
       )}
     </div>
