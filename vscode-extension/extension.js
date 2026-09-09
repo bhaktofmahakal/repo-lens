@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { execSync } = require("node:child_process");
 const vscode = require("vscode");
 
 const EXTENSION_SECRET_API_KEY = "repolens.apiKey";
@@ -19,7 +20,7 @@ async function setGuestMode(value) {
 }
 
 function getBaseUrl() {
-  return String(getConfig().get("baseUrl", "")).trim().replace(/\/$/, "");
+  return String(getConfig().get("baseUrl", "https://repo-lens-gamma.vercel.app")).trim().replace(/\/$/, "");
 }
 
 function getValidatedBaseUrl() {
@@ -58,7 +59,7 @@ async function getApiKey(context, promptIfMissing = true) {
 
   const entered = await vscode.window.showInputBox({
     title: "RepoLens API Key",
-    prompt: "Enter your RepoLens API key",
+    prompt: "Enter your RepoLens API key (from https://repo-lens-gamma.vercel.app/dashboard/settings)",
     password: true,
     ignoreFocusOut: true,
   });
@@ -86,7 +87,7 @@ async function setApiKey(context) {
   }
 
   await context.secrets.store(EXTENSION_SECRET_API_KEY, entered.trim());
-  vscode.window.showInformationMessage("RepoLens API key saved.");
+  vscode.window.showInformationMessage("RepoLens API key securely saved in secret storage.");
   return true;
 }
 
@@ -94,7 +95,7 @@ async function setRepoId() {
   const current = getDefaultRepoId();
   const entered = await vscode.window.showInputBox({
     title: "RepoLens Default Repo ID",
-    prompt: "Enter the repo UUID to use by default",
+    prompt: "Enter the repository UUID to use by default",
     value: current,
     ignoreFocusOut: true,
   });
@@ -104,8 +105,73 @@ async function setRepoId() {
   }
 
   await setDefaultRepoId(entered);
-  vscode.window.showInformationMessage("RepoLens default repo ID updated.");
+  vscode.window.showInformationMessage(`RepoLens active repo set to: ${entered.slice(0, 8)}...`);
   return true;
+}
+
+function getLocalGitRemoteUrl() {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || !workspaceFolders.length) return null;
+
+  for (const folder of workspaceFolders) {
+    try {
+      const gitUrl = execSync("git config --get remote.origin.url", {
+        cwd: folder.uri.fsPath,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim();
+      if (gitUrl) {
+        return gitUrl
+          .replace(/^git@github\.com:/, "https://github.com/")
+          .replace(/\.git$/, "")
+          .toLowerCase();
+      }
+    } catch {
+      // Continue searching next folder
+    }
+  }
+  return null;
+}
+
+async function autoDetectActiveRepo(context) {
+  const gitUrl = getLocalGitRemoteUrl();
+  if (!gitUrl) {
+    vscode.window.showWarningMessage("No Git remote origin detected in the current workspace.");
+    return null;
+  }
+
+  const baseUrl = getValidatedBaseUrl();
+  const apiKey = await getApiKey(context, true);
+
+  try {
+    const repos = await requestJson({
+      baseUrl,
+      route: "/api/v1/repos",
+      method: "GET",
+      apiKey,
+    });
+
+    if (Array.isArray(repos)) {
+      const match = repos.find(
+        (r) => r.github_url && r.github_url.toLowerCase().replace(/\.git$/, "") === gitUrl,
+      );
+
+      if (match) {
+        await setDefaultRepoId(match.id);
+        vscode.window.showInformationMessage(`RepoLens auto-detected: ${match.name} (${match.id.slice(0, 8)}...)`);
+        return match.id;
+      }
+    }
+
+    vscode.window.showInformationMessage(
+      `Remote '${gitUrl}' found, but not indexed on RepoLens yet. Run 'RepoLens: Ingest Repository URL' to index it.`,
+    );
+    return null;
+  } catch (err) {
+    vscode.window.showErrorMessage(`Repo auto-detection failed: ${err.message}`);
+    return null;
+  }
 }
 
 function normalizeCitation(raw) {
@@ -157,10 +223,12 @@ function createNonce() {
 }
 
 function escapeHtml(value) {
-  return String(value || "").replace(/[&<>]/g, (ch) => {
+  return String(value || "").replace(/[&<>"']/g, (ch) => {
     if (ch === "&") return "&amp;";
     if (ch === "<") return "&lt;";
-    return "&gt;";
+    if (ch === ">") return "&gt;";
+    if (ch === '"') return "&quot;";
+    return "&#39;";
   });
 }
 
@@ -170,7 +238,7 @@ function isLikelyZipUrl(value) {
 
 async function requestJson({ baseUrl, route, method = "GET", apiKey, body }) {
   const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), 30000);
+  const timeoutHandle = setTimeout(() => controller.abort(), 45000);
 
   let response;
   try {
@@ -216,7 +284,6 @@ async function ingestRepoByUrl(context, sourceUrl) {
   const baseUrl = getValidatedBaseUrl();
   const apiKey = await getApiKey(context, true);
   if (!apiKey && !getGuestMode()) {
-    // If guest mode isn't enabled, require API key
     throw new Error("RepoLens API key is required. Or enable Guest Mode from the extension commands.");
   }
 
@@ -246,8 +313,8 @@ async function ingestRepoByUrl(context, sourceUrl) {
 
 async function askRepoQuestion(context, repoId, question) {
   const baseUrl = getValidatedBaseUrl();
-
   const apiKey = await getApiKey(context, true);
+
   if (!apiKey && !getGuestMode()) {
     throw new Error("RepoLens API key is required. Or enable Guest Mode from the extension commands.");
   }
@@ -258,6 +325,19 @@ async function askRepoQuestion(context, repoId, question) {
     method: "POST",
     apiKey,
     body: { question: question.trim() },
+  });
+}
+
+async function requestRefactor(context, repoId, question) {
+  const baseUrl = getValidatedBaseUrl();
+  const apiKey = await getApiKey(context, true);
+
+  return requestJson({
+    baseUrl,
+    route: "/api/refactor",
+    method: "POST",
+    apiKey,
+    body: { question: question.trim(), sourceId: repoId },
   });
 }
 
@@ -315,9 +395,10 @@ function renderAnswerHtml(answerText, citations) {
   const citationList = citations
     .map((citation) => {
       const label = `${citation.filePath}:L${citation.startLine}-L${citation.endLine}`;
-      return `<li><a href="${citation.commandUri}">${escapeHtml(label)}</a></li>`;
+      return `<li style="margin:6px 0;"><a style="color:#ff7759; text-decoration:none; font-family:monospace; background:rgba(255,119,89,0.1); padding:3px 8px; border-radius:4px; border:1px solid rgba(255,119,89,0.2);" href="${citation.commandUri}">${escapeHtml(label)}</a></li>`;
     })
     .join("");
+
   const csp = [
     "default-src 'none'",
     "style-src 'unsafe-inline'",
@@ -329,18 +410,20 @@ function renderAnswerHtml(answerText, citations) {
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <style>
-    body { font-family: var(--vscode-font-family); padding: 16px; line-height: 1.45; }
-    h2 { margin: 0 0 10px; }
-    pre { white-space: pre-wrap; background: var(--vscode-editor-background); padding: 12px; border-radius: 6px; }
-    ul { padding-left: 18px; }
-    a { text-decoration: none; }
+    body { font-family: var(--vscode-font-family); padding: 20px; line-height: 1.6; color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); }
+    h2 { font-size: 16px; font-weight: 600; color: #ff7759; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .answer-box { background: var(--vscode-editorWidget-background, rgba(255,255,255,0.03)); border: 1px solid var(--vscode-editorWidget-border, rgba(255,255,255,0.1)); padding: 16px; border-radius: 8px; font-family: var(--vscode-editor-font-family); font-size: 13px; white-space: pre-wrap; line-height: 1.6; }
+    .citations-box { margin-top: 20px; padding: 14px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); }
+    ul { list-style: none; padding: 0; margin: 8px 0 0; }
   </style>
 </head>
 <body>
-  <h2>Answer</h2>
-  <pre>${escapeHtml(answerText || "No answer.")}</pre>
-  <h2>Citations</h2>
-  ${citationList ? `<ul>${citationList}</ul>` : "<p>No citations returned.</p>"}
+  <h2><span>⚡</span> RepoLens Answer</h2>
+  <div class="answer-box">${escapeHtml(answerText || "No answer.")}</div>
+  <div class="citations-box">
+    <h2><span>📍</span> Verified Citations</h2>
+    ${citationList ? `<ul>${citationList}</ul>` : "<p style='color:var(--vscode-descriptionForeground); font-size:12px;'>No direct line citations returned.</p>"}
+  </div>
 </body>
 </html>`;
 }
@@ -357,6 +440,7 @@ class RepoLensSidebarProvider {
       baseUrl: getBaseUrl(),
       repoId: getDefaultRepoId(),
       hasApiKey,
+      guestMode: getGuestMode(),
     };
   }
 
@@ -387,162 +471,332 @@ class RepoLensSidebarProvider {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <style>
-    body { font-family: var(--vscode-font-family); margin: 0; padding: 12px; }
-    .meta { font-size: 12px; color: var(--vscode-descriptionForeground); margin-bottom: 10px; }
-    .block { margin-bottom: 12px; }
-    input, button { width: 100%; box-sizing: border-box; }
-    input {
-      padding: 8px;
-      border: 1px solid var(--vscode-input-border);
-      background: var(--vscode-input-background);
-      color: var(--vscode-input-foreground);
+    body {
+      font-family: var(--vscode-font-family);
+      margin: 0;
+      padding: 14px;
+      color: var(--vscode-foreground);
+      background-color: transparent;
+      line-height: 1.45;
+    }
+    .badge-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.08));
+      font-size: 11px;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      display: inline-block;
+      margin-right: 5px;
+      box-shadow: 0 0 8px #22c55e;
+    }
+    .brand {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #ff7759;
+    }
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .pill {
+      font-size: 10px;
+      background: rgba(255, 119, 89, 0.1);
+      color: #ff7759;
+      border: 1px solid rgba(255, 119, 89, 0.25);
+      padding: 3px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+    .pill:hover {
+      background: rgba(255, 119, 89, 0.25);
+      border-color: #ff7759;
+    }
+    .input-group {
+      margin-bottom: 12px;
+    }
+    textarea, input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.15));
+      background: var(--vscode-input-background, #17171c);
+      color: var(--vscode-input-foreground, #fff);
       border-radius: 6px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    textarea:focus, input:focus {
+      outline: 1px solid #ff7759;
+      border-color: #ff7759;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 56px;
     }
     button {
-      margin-top: 6px;
-      padding: 8px;
-      border: 1px solid var(--vscode-button-border, transparent);
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid transparent;
+      background: #ff7759;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 12px;
       border-radius: 6px;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: opacity 0.15s ease;
+    }
+    button:hover {
+      opacity: 0.92;
     }
     button.secondary {
-      background: var(--vscode-button-secondaryBackground);
-      color: var(--vscode-button-secondaryForeground);
+      background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.08));
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      font-weight: 500;
+      margin-top: 6px;
+      border: 1px solid var(--vscode-button-border, rgba(255,255,255,0.1));
     }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .output {
+    button.secondary:hover {
+      background: rgba(255,255,255,0.14);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .telemetry-ticker {
+      display: none;
       margin-top: 10px;
-      border: 1px solid var(--vscode-editorWidget-border);
-      border-radius: 6px;
       padding: 10px;
-      white-space: pre-wrap;
+      border-radius: 6px;
+      background: rgba(255, 119, 89, 0.05);
+      border: 1px solid rgba(255, 119, 89, 0.2);
+      font-size: 11px;
+      color: #ff7759;
     }
-    .citations { margin-top: 8px; padding-left: 18px; }
-    .citations li { margin: 4px 0; }
-    .status { margin-top: 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+    .ticker-bar {
+      height: 2px;
+      background: #ff7759;
+      width: 100%;
+      margin-top: 6px;
+      animation: pulseBar 1.2s infinite ease-in-out;
+    }
+    @keyframes pulseBar {
+      0% { opacity: 0.3; transform: scaleX(0.2); }
+      50% { opacity: 1; transform: scaleX(1); }
+      100% { opacity: 0.3; transform: scaleX(0.2); }
+    }
+    .output-card {
+      margin-top: 12px;
+      border: 1px solid var(--vscode-editorWidget-border, rgba(255,255,255,0.1));
+      background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+    .citations-container {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .citation-tag {
+      display: inline-block;
+      margin: 3px 4px 3px 0;
+      padding: 3px 8px;
+      background: rgba(255,119,89,0.12);
+      border: 1px solid rgba(255,119,89,0.25);
+      color: #ff7759;
+      border-radius: 4px;
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 11px;
+      text-decoration: none;
+    }
+    .meta-text {
+      font-size: 10.5px;
+      color: var(--vscode-descriptionForeground, #888);
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
-  <div class="meta" id="meta"></div>
-
-  <div class="block">
-    <input id="sourceUrl" placeholder="GitHub repo URL or ZIP URL" />
-    <button id="ingestBtn">Ingest Repository</button>
+  <div class="badge-bar">
+    <div><span class="status-dot"></span><span class="brand">RepoLens AI</span></div>
+    <div id="metaStatus" class="meta-text" style="margin:0;">Ready</div>
   </div>
 
-  <div class="block">
-    <input id="question" placeholder="Ask a question about this repo" />
-    <button id="askBtn">Ask RepoLens</button>
+  <div class="pills">
+    <div class="pill" onclick="setQuery('How does authentication and route protection work?')">🔒 Auth Guard</div>
+    <div class="pill" onclick="setQuery('Where is vector cosine retrieval executed?')">⚡ Vector Query</div>
+    <div class="pill" onclick="setQuery('Explain project structure and entrypoints')">📐 Architecture</div>
+  </div>
+
+  <div class="input-group">
+    <textarea id="questionInput" placeholder="Ask anything about your codebase (Ctrl+Alt+L)..."></textarea>
+    <button id="askBtn">
+      <span>⚡ Ask RepoLens</span>
+    </button>
   </div>
 
   <div class="row">
-    <button class="secondary" id="setApiKeyBtn">Set API Key</button>
-    <button class="secondary" id="setRepoIdBtn">Set Repo ID</button>
+    <button class="secondary" id="autoDetectBtn" title="Auto-detect repo from git remote">🎯 Auto Git</button>
+    <button class="secondary" id="refactorBtn" title="Generate architectural refactoring recommendations">🛠️ Refactor</button>
   </div>
-  <button class="secondary" id="refreshBtn">Refresh</button>
 
-  <div class="status" id="status"></div>
-  <div class="output" id="output">Ask a question to see answers and citations.</div>
+  <div class="telemetry-ticker" id="tickerBox">
+    <div id="tickerMsg">Retrieving pgvector embeddings...</div>
+    <div class="ticker-bar"></div>
+  </div>
+
+  <div class="output-card" id="outputBox">Ask a question or right-click code in your editor to interrogate your repository.</div>
+
+  <div class="row">
+    <button class="secondary" id="ingestBtn">📥 Ingest Repo</button>
+    <button class="secondary" id="keyBtn">🔑 API Key</button>
+  </div>
+
+  <div class="meta-text" id="configMeta">Base: loading...</div>
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const state = ${safeState};
 
-    const metaEl = document.getElementById("meta");
-    const statusEl = document.getElementById("status");
-    const outputEl = document.getElementById("output");
-    const sourceUrlEl = document.getElementById("sourceUrl");
-    const questionEl = document.getElementById("question");
+    const questionInput = document.getElementById("questionInput");
+    const outputBox = document.getElementById("outputBox");
+    const tickerBox = document.getElementById("tickerBox");
+    const tickerMsg = document.getElementById("tickerMsg");
+    const metaStatus = document.getElementById("metaStatus");
+    const configMeta = document.getElementById("configMeta");
 
-    function renderMeta(s) {
-      const keyState = s.hasApiKey ? "set" : "missing";
-      const repo = s.repoId || "not set";
-      const base = s.baseUrl || "not set";
-      metaEl.textContent = "Base URL: " + base + " | Repo ID: " + repo + " | API key: " + keyState;
+    function setQuery(text) {
+      questionInput.value = text;
+      questionInput.focus();
     }
 
-    function setStatus(text) {
-      statusEl.textContent = text || "";
+    function updateConfigDisplay(s) {
+      const repo = s.repoId ? s.repoId.slice(0, 8) + "..." : "none";
+      const keyState = s.hasApiKey ? "Saved" : (s.guestMode ? "Guest" : "Missing");
+      configMeta.textContent = "Repo: " + repo + " | Key: " + keyState;
+    }
+
+    function setTelemetry(active, message) {
+      if (active) {
+        tickerBox.style.display = "block";
+        tickerMsg.textContent = message || "Synthesizing answer via Groq Llama 3.3 70B...";
+        metaStatus.textContent = "Thinking...";
+      } else {
+        tickerBox.style.display = "none";
+        metaStatus.textContent = "Ready";
+      }
     }
 
     function renderAnswer(payload) {
-      const answer = String(payload.answer || "No answer.");
+      setTelemetry(false);
+      outputBox.innerHTML = "";
+
+      const answerEl = document.createElement("div");
+      answerEl.textContent = payload.answer || "No response received.";
+      outputBox.appendChild(answerEl);
+
       const citations = Array.isArray(payload.citations) ? payload.citations : [];
+      if (citations.length > 0) {
+        const citeBox = document.createElement("div");
+        citeBox.className = "citations-container";
+        
+        const title = document.createElement("div");
+        title.style.fontWeight = "600";
+        title.style.marginBottom = "4px";
+        title.style.color = "#ff7759";
+        title.textContent = "📍 Verified Citations:";
+        citeBox.appendChild(title);
 
-      outputEl.textContent = answer;
-      if (!citations.length) {
-        return;
+        citations.forEach((c) => {
+          const link = document.createElement("a");
+          link.className = "citation-tag";
+          link.href = c.commandUri;
+          link.textContent = c.filePath + ":L" + c.startLine + "-L" + c.endLine;
+          citeBox.appendChild(link);
+        });
+
+        outputBox.appendChild(citeBox);
       }
-
-      const title = document.createElement("div");
-      title.style.marginTop = "8px";
-      title.textContent = "Citations:";
-      outputEl.appendChild(document.createElement("br"));
-      outputEl.appendChild(title);
-
-      const list = document.createElement("ul");
-      list.className = "citations";
-
-      for (const c of citations) {
-        const item = document.createElement("li");
-        const link = document.createElement("a");
-        link.href = c.commandUri;
-        link.textContent = c.filePath + ":L" + c.startLine + "-L" + c.endLine;
-        item.appendChild(link);
-        list.appendChild(item);
-      }
-
-      outputEl.appendChild(list);
     }
 
     document.getElementById("askBtn").addEventListener("click", () => {
-      vscode.postMessage({ type: "ask", question: questionEl.value || "" });
+      const q = questionInput.value.trim();
+      if (!q) return;
+      setTelemetry(true, "Embedding query vector & scanning Supabase pgvector...");
+      vscode.postMessage({ type: "ask", question: q });
     });
 
-    questionEl.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        vscode.postMessage({ type: "ask", question: questionEl.value || "" });
+    questionInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const q = questionInput.value.trim();
+        if (!q) return;
+        setTelemetry(true, "Embedding query vector & scanning Supabase pgvector...");
+        vscode.postMessage({ type: "ask", question: q });
       }
+    });
+
+    document.getElementById("autoDetectBtn").addEventListener("click", () => {
+      vscode.postMessage({ type: "autoDetect" });
+    });
+
+    document.getElementById("refactorBtn").addEventListener("click", () => {
+      const q = questionInput.value.trim() || "Extract focused helper functions and modularize components";
+      setTelemetry(true, "Analyzing cyclomatic complexity and coupling points...");
+      vscode.postMessage({ type: "refactor", question: q });
     });
 
     document.getElementById("ingestBtn").addEventListener("click", () => {
-      vscode.postMessage({ type: "ingest", sourceUrl: sourceUrlEl.value || "" });
+      vscode.postMessage({ type: "ingestPrompt" });
     });
 
-    document.getElementById("setApiKeyBtn").addEventListener("click", () => {
+    document.getElementById("keyBtn").addEventListener("click", () => {
       vscode.postMessage({ type: "setApiKey" });
     });
 
-    document.getElementById("setRepoIdBtn").addEventListener("click", () => {
-      vscode.postMessage({ type: "setRepoId" });
-    });
-
-    document.getElementById("refreshBtn").addEventListener("click", () => {
-      vscode.postMessage({ type: "refresh" });
-    });
-
     window.addEventListener("message", (event) => {
-      const message = event.data;
-      if (!message || typeof message !== "object") return;
+      const m = event.data;
+      if (!m || typeof m !== "object") return;
 
-      if (message.type === "state") {
-        renderMeta(message.state || {});
-      } else if (message.type === "busy") {
-        setStatus(message.text || "Working...");
-      } else if (message.type === "answer") {
-        setStatus("");
-        renderAnswer(message);
-      } else if (message.type === "error") {
-        setStatus("");
-        outputEl.textContent = "Error: " + (message.text || "Unknown error");
-      } else if (message.type === "info") {
-        setStatus(message.text || "");
+      if (m.type === "state") {
+        updateConfigDisplay(m.state || {});
+      } else if (m.type === "busy") {
+        setTelemetry(true, m.text);
+      } else if (m.type === "answer") {
+        renderAnswer(m);
+      } else if (m.type === "error") {
+        setTelemetry(false);
+        outputBox.textContent = "Error: " + (m.text || "Unknown error occurred.");
+      } else if (m.type === "info") {
+        setTelemetry(false);
+        outputBox.textContent = m.text || "";
       }
     });
 
-    renderMeta(state);
+    updateConfigDisplay(state);
   </script>
 </body>
 </html>`;
@@ -576,17 +830,46 @@ class RepoLensSidebarProvider {
           return;
         }
 
-        if (message.type === "setRepoId") {
-          await setRepoId();
+        if (message.type === "autoDetect") {
+          await autoDetectActiveRepo(this.context);
           await this.refresh();
           return;
         }
 
-        if (message.type === "ingest") {
-          this.post({ type: "busy", text: "Ingesting repository..." });
-          const data = await ingestRepoByUrl(this.context, message.sourceUrl);
-          this.post({ type: "info", text: `Ingest completed. Repo ID set to ${data?.id || "(unknown)"}.` });
-          await this.refresh();
+        if (message.type === "ingestPrompt") {
+          await ingestRepo(this.context, this);
+          return;
+        }
+
+        if (message.type === "refactor") {
+          let repoId = getDefaultRepoId();
+          if (!repoId) {
+            repoId = await autoDetectActiveRepo(this.context);
+          }
+          if (!repoId) {
+            this.post({ type: "error", text: "Default Repo ID is not set. Run 'Auto Git' or configure Default Repo ID." });
+            return;
+          }
+
+          this.post({ type: "busy", text: "Synthesizing architectural refactor suggestions..." });
+          const payload = await requestRefactor(this.context, repoId, message.question || "Refactor recommendations");
+          
+          let responseText = "AI Architectural Refactoring Recommendations:\n\n";
+          if (Array.isArray(payload?.suggestions) && payload.suggestions.length > 0) {
+            payload.suggestions.forEach((sug, i) => {
+              responseText += `#${i + 1}. ${sug.title}\n${sug.rationale}\n`;
+              if (sug.expectedImpact) responseText += `Impact: ${sug.expectedImpact}\n`;
+              responseText += "\n";
+            });
+          } else {
+            responseText += "No major architectural issues detected.";
+          }
+
+          this.post({
+            type: "answer",
+            answer: responseText,
+            citations: [],
+          });
           return;
         }
 
@@ -597,13 +880,16 @@ class RepoLensSidebarProvider {
             return;
           }
 
-          const repoId = getDefaultRepoId();
+          let repoId = getDefaultRepoId();
           if (!repoId) {
-            this.post({ type: "error", text: "Default Repo ID is not set." });
+            repoId = await autoDetectActiveRepo(this.context);
+          }
+          if (!repoId) {
+            this.post({ type: "error", text: "Default Repo ID is not set. Run 'Auto Git' or set Default Repo ID." });
             return;
           }
 
-          this.post({ type: "busy", text: "Generating answer..." });
+          this.post({ type: "busy", text: "Synthesizing answer via Groq Llama 3.3 70B..." });
           const payload = await askRepoQuestion(this.context, repoId, question);
           const citations = Array.isArray(payload?.citations)
             ? payload.citations.map(normalizeCitation).filter(Boolean).map(toWebCitation)
@@ -624,22 +910,23 @@ class RepoLensSidebarProvider {
 }
 
 async function askQuestion(context) {
-  const repoIdInput = await vscode.window.showInputBox({
-    title: "RepoLens Repo ID",
-    prompt: "Enter repo ID (leave empty to use default)",
-    value: getDefaultRepoId(),
-    ignoreFocusOut: true,
-  });
-  if (repoIdInput === undefined) return;
-
-  const repoId = repoIdInput.trim() || getDefaultRepoId();
+  let repoId = getDefaultRepoId();
   if (!repoId) {
-    vscode.window.showErrorMessage("Repo ID is required. Run 'RepoLens: Set Default Repo ID'.");
-    return;
+    repoId = await autoDetectActiveRepo(context);
+  }
+
+  if (!repoId) {
+    const entered = await vscode.window.showInputBox({
+      title: "RepoLens Repo ID",
+      prompt: "Enter repo ID to query",
+      ignoreFocusOut: true,
+    });
+    if (!entered) return;
+    repoId = entered.trim();
   }
 
   const question = await vscode.window.showInputBox({
-    title: "Ask RepoLens",
+    title: "Ask RepoLens (Groq Llama 3.3 70B)",
     prompt: "Ask a question about this repository",
     ignoreFocusOut: true,
   });
@@ -648,7 +935,7 @@ async function askQuestion(context) {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: "RepoLens is generating an answer...",
+      title: "RepoLens: Synthesizing citation-grounded answer...",
     },
     async () => {
       try {
@@ -675,10 +962,153 @@ async function askQuestion(context) {
   );
 }
 
+async function askAboutSelection(context) {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+
+  const selection = editor.document.getText(editor.selection);
+  if (!selection.trim()) return;
+
+  const prompt = await vscode.window.showInputBox({
+    title: "RepoLens: Ask About Selected Code",
+    prompt: "What would you like to know about this selection?",
+    value: "Explain how this code interacts with the rest of the application",
+    ignoreFocusOut: true,
+  });
+  if (!prompt || !prompt.trim()) return;
+
+  const relativePath = vscode.workspace.asRelativePath(editor.document.uri);
+  const fullQuestion = `${prompt}\n\nContext file: ${relativePath}\n\`\`\`\n${selection}\n\`\`\``;
+
+  let repoId = getDefaultRepoId();
+  if (!repoId) {
+    repoId = await autoDetectActiveRepo(context);
+  }
+  if (!repoId) {
+    vscode.window.showErrorMessage("Repo ID not set. Auto-detect or configure default repo ID first.");
+    return;
+  }
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "RepoLens: Analyzing selected code...",
+    },
+    async () => {
+      try {
+        const payload = await askRepoQuestion(context, repoId, fullQuestion);
+        const citations = Array.isArray(payload?.citations)
+          ? payload.citations.map(normalizeCitation).filter(Boolean).map(toWebCitation)
+          : [];
+
+        const panel = vscode.window.createWebviewPanel(
+          "repolensAnswer",
+          "RepoLens: Selection Analysis",
+          vscode.ViewColumn.Beside,
+          { enableCommandUris: ["repolens.openCitation"], localResourceRoots: [] },
+        );
+        panel.webview.html = renderAnswerHtml(payload?.answer || "No answer.", citations);
+      } catch (err) {
+        vscode.window.showErrorMessage(`RepoLens error: ${err.message}`);
+      }
+    },
+  );
+}
+
+async function explainSelection(context) {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+
+  const selection = editor.document.getText(editor.selection);
+  if (!selection.trim()) return;
+
+  const relativePath = vscode.workspace.asRelativePath(editor.document.uri);
+  const question = `Explain the architectural purpose, logic flow, and edge cases of this snippet from '${relativePath}':\n\n\`\`\`\n${selection}\n\`\`\``;
+
+  let repoId = getDefaultRepoId();
+  if (!repoId) {
+    repoId = await autoDetectActiveRepo(context);
+  }
+  if (!repoId) {
+    vscode.window.showErrorMessage("Repo ID not set. Auto-detect or configure default repo ID first.");
+    return;
+  }
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "RepoLens: Explaining selected code...",
+    },
+    async () => {
+      try {
+        const payload = await askRepoQuestion(context, repoId, question);
+        const citations = Array.isArray(payload?.citations)
+          ? payload.citations.map(normalizeCitation).filter(Boolean).map(toWebCitation)
+          : [];
+
+        const panel = vscode.window.createWebviewPanel(
+          "repolensAnswer",
+          "RepoLens: Code Explanation",
+          vscode.ViewColumn.Beside,
+          { enableCommandUris: ["repolens.openCitation"], localResourceRoots: [] },
+        );
+        panel.webview.html = renderAnswerHtml(payload?.answer || "No answer.", citations);
+      } catch (err) {
+        vscode.window.showErrorMessage(`RepoLens error: ${err.message}`);
+      }
+    },
+  );
+}
+
+async function refactorSelection(context) {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+
+  const selection = editor.document.getText(editor.selection);
+  if (!selection.trim()) return;
+
+  const relativePath = vscode.workspace.asRelativePath(editor.document.uri);
+  const question = `Refactor this code to improve modularity, type safety, performance, and readability in '${relativePath}':\n\n\`\`\`\n${selection}\n\`\`\``;
+
+  let repoId = getDefaultRepoId();
+  if (!repoId) {
+    repoId = await autoDetectActiveRepo(context);
+  }
+  if (!repoId) {
+    vscode.window.showErrorMessage("Repo ID not set. Auto-detect or configure default repo ID first.");
+    return;
+  }
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "RepoLens: Generating refactor proposal...",
+    },
+    async () => {
+      try {
+        const payload = await askRepoQuestion(context, repoId, question);
+        const citations = Array.isArray(payload?.citations)
+          ? payload.citations.map(normalizeCitation).filter(Boolean).map(toWebCitation)
+          : [];
+
+        const panel = vscode.window.createWebviewPanel(
+          "repolensAnswer",
+          "RepoLens: Refactor Proposal",
+          vscode.ViewColumn.Beside,
+          { enableCommandUris: ["repolens.openCitation"], localResourceRoots: [] },
+        );
+        panel.webview.html = renderAnswerHtml(payload?.answer || "No answer.", citations);
+      } catch (err) {
+        vscode.window.showErrorMessage(`RepoLens error: ${err.message}`);
+      }
+    },
+  );
+}
+
 async function ingestRepo(context, sidebarProvider) {
   const sourceUrl = await vscode.window.showInputBox({
-    title: "RepoLens Ingest",
-    prompt: "Enter GitHub repo URL or ZIP URL",
+    title: "RepoLens Ingest Repository",
+    prompt: "Enter GitHub repo URL (e.g. https://github.com/org/repo) or public ZIP URL",
     ignoreFocusOut: true,
   });
   if (!sourceUrl || !sourceUrl.trim()) return;
@@ -686,13 +1116,15 @@ async function ingestRepo(context, sidebarProvider) {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: "RepoLens is ingesting repository...",
+      title: "RepoLens: Ingesting repository & generating vector embeddings...",
     },
     async () => {
       try {
         const data = await ingestRepoByUrl(context, sourceUrl.trim());
-        vscode.window.showInformationMessage(`RepoLens ingest completed. Repo ID: ${data?.id || "unknown"}`);
-        await sidebarProvider.refresh();
+        vscode.window.showInformationMessage(`RepoLens ingest completed! Repo ID: ${data?.id || "unknown"}`);
+        if (sidebarProvider) {
+          await sidebarProvider.refresh();
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         vscode.window.showErrorMessage(`RepoLens ingest failed: ${message}`);
@@ -704,6 +1136,11 @@ async function ingestRepo(context, sidebarProvider) {
 function activate(context) {
   const sidebarProvider = new RepoLensSidebarProvider(context);
 
+  // Auto-detect on activation if configured
+  if (getConfig().get("autoDetectGitOrigin", true) && !getDefaultRepoId()) {
+    void autoDetectActiveRepo(context).then(() => sidebarProvider.refresh());
+  }
+
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebarProvider),
     vscode.commands.registerCommand("repolens.setApiKey", async () => {
@@ -714,7 +1151,14 @@ function activate(context) {
       await setRepoId();
       await sidebarProvider.refresh();
     }),
+    vscode.commands.registerCommand("repolens.autoDetectRepo", async () => {
+      await autoDetectActiveRepo(context);
+      await sidebarProvider.refresh();
+    }),
     vscode.commands.registerCommand("repolens.askQuestion", () => askQuestion(context)),
+    vscode.commands.registerCommand("repolens.askSelection", () => askAboutSelection(context)),
+    vscode.commands.registerCommand("repolens.explainSelection", () => explainSelection(context)),
+    vscode.commands.registerCommand("repolens.refactorSelection", () => refactorSelection(context)),
     vscode.commands.registerCommand("repolens.ingestRepo", () => ingestRepo(context, sidebarProvider)),
     vscode.commands.registerCommand("repolens.refreshSidebar", () => sidebarProvider.refresh()),
     vscode.commands.registerCommand("repolens.enableGuestMode", async () => {
@@ -731,14 +1175,30 @@ function activate(context) {
       }
     }),
     vscode.commands.registerCommand("repolens.showOnboarding", async () => {
-      const panel = vscode.window.createWebviewPanel("repolensOnboard", "RepoLens Onboarding", vscode.ViewColumn.One, { enableScripts: true });
-      panel.webview.html = `<!doctype html><html><body style="font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; padding:20px;"><h1>RepoLens Quick Start</h1><ol><li>Set <b>repolens.baseUrl</b> in Settings to your deployment (e.g. https://repo-lens-gamma.vercel.app)</li><li>Run command: <b>RepoLens: Set API Key</b> (or enable Guest Mode)</li><li>Set default repo via <b>RepoLens: Set Default Repo ID</b> or ingest a repo</li><li>Use <b>RepoLens: Ask a Question</b> to query your repo.</li></ol><p><button onclick="acquireVsCodeApi().postMessage({ type: 'enableGuest' })">Enable Guest Mode</button></p></body></html>`;
-      panel.webview.onDidReceiveMessage(async (m) => {
-        if (m && m.type === "enableGuest") {
-          await setGuestMode(true);
-          vscode.window.showInformationMessage("Guest Mode enabled.");
-        }
-      });
+      const panel = vscode.window.createWebviewPanel(
+        "repolensOnboard",
+        "RepoLens Quickstart Guide",
+        vscode.ViewColumn.One,
+        { enableScripts: true },
+      );
+      panel.webview.html = `<!doctype html>
+<html>
+<head>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; max-width: 600px; line-height: 1.6; color: var(--vscode-foreground); }
+    h1 { color: #ff7759; margin-top: 0; }
+    .step { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); padding: 14px; border-radius: 8px; margin-bottom: 12px; }
+    kbd { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>⚡ RepoLens VS Code Intelligence</h1>
+  <p>Instant codebase Q&A with verified line-level source code citations.</p>
+  <div class="step"><b>1. Connect API Key:</b> Press <kbd>Ctrl+Shift+P</kbd> &rarr; <code>RepoLens: Set API Key</code></div>
+  <div class="step"><b>2. Auto-Detect Repo:</b> Open a folder with a Git repository and click <b>🎯 Auto Git</b> in the sidebar</div>
+  <div class="step"><b>3. Query Anytime:</b> Press <kbd>Ctrl+Alt+L</kbd> or right-click any code selection &rarr; <code>RepoLens: Explain Selected Code</code></div>
+</body>
+</html>`;
     }),
     vscode.commands.registerCommand("repolens.openCitation", openCitation),
     vscode.workspace.onDidChangeConfiguration((event) => {

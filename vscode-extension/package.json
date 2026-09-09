@@ -1,8 +1,8 @@
 {
   "name": "repolens-vscode-extension",
-  "displayName": "RepoLens",
-  "description": "Ask questions about your repository with citation-backed answers from RepoLens.",
-  "version": "0.0.3",
+  "displayName": "RepoLens - Codebase AI & Grounded Citations",
+  "description": "Enterprise-grade AI codebase intelligence with verified line-range source code citations directly in VS Code.",
+  "version": "0.1.0",
   "publisher": "repolens",
   "license": "MIT",
   "repository": {
@@ -15,16 +15,23 @@
   },
   "keywords": [
     "repolens",
-    "repository",
+    "ai",
     "code-search",
     "llm",
-    "citations"
+    "citations",
+    "groq",
+    "llama",
+    "refactor",
+    "pgvector"
   ],
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Other"
+    "AI",
+    "Programming Languages",
+    "Education",
+    "Snippets"
   ],
   "main": "./extension.js",
   "scripts": {
@@ -35,6 +42,22 @@
       {
         "command": "repolens.askQuestion",
         "title": "RepoLens: Ask a Question"
+      },
+      {
+        "command": "repolens.askSelection",
+        "title": "RepoLens: Ask About Selected Code"
+      },
+      {
+        "command": "repolens.explainSelection",
+        "title": "RepoLens: Explain Selected Code"
+      },
+      {
+        "command": "repolens.refactorSelection",
+        "title": "RepoLens: Refactor Selected Code"
+      },
+      {
+        "command": "repolens.autoDetectRepo",
+        "title": "RepoLens: Auto-Detect Active Git Repo"
       },
       {
         "command": "repolens.ingestRepo",
@@ -54,27 +77,62 @@
       },
       {
         "command": "repolens.enableGuestMode",
-        "title": "RepoLens: Enable Guest Mode (no account)"
+        "title": "RepoLens: Toggle Guest Mode"
       },
       {
         "command": "repolens.showOnboarding",
-        "title": "RepoLens: Show Onboarding"
+        "title": "RepoLens: Show Quickstart Guide"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "repolens.askQuestion",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l"
+      },
+      {
+        "command": "repolens.refactorSelection",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "editorHasSelection"
       }
     ],
     "views": {
       "explorer": [
         {
           "id": "repolens.sidebar",
-          "name": "RepoLens"
+          "name": "RepoLens Intelligence"
         }
       ]
     },
     "menus": {
+      "editor/context": [
+        {
+          "command": "repolens.askSelection",
+          "when": "editorHasSelection",
+          "group": "repolens@1"
+        },
+        {
+          "command": "repolens.explainSelection",
+          "when": "editorHasSelection",
+          "group": "repolens@2"
+        },
+        {
+          "command": "repolens.refactorSelection",
+          "when": "editorHasSelection",
+          "group": "repolens@3"
+        }
+      ],
       "view/title": [
+        {
+          "command": "repolens.autoDetectRepo",
+          "when": "view == repolens.sidebar",
+          "group": "navigation@1"
+        },
         {
           "command": "repolens.refreshSidebar",
           "when": "view == repolens.sidebar",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ]
     },
@@ -90,12 +148,16 @@
           "type": "string",
           "default": "",
           "description": "Default RepoLens repository ID for query commands."
-        }
-      ,
+        },
+        "repolens.autoDetectGitOrigin": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect active repository from workspace git remote origin."
+        },
         "repolens.guestMode": {
           "type": "boolean",
           "default": false,
-          "description": "Allow using RepoLens without signing in by enabling guest mode (anonymous queries)."
+          "description": "Allow using RepoLens without signing in by enabling guest mode."
         }
       }
     }
