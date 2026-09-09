@@ -123,10 +123,10 @@ function CohereNavbarInner({ userEmail }: CohereNavbarProps) {
       active: pathname === "/history",
     },
     {
-      href: "/dashboard/billing",
-      label: "Billing",
-      icon: CreditCard,
-      active: pathname.startsWith("/dashboard/billing"),
+      href: "/api/docs",
+      label: "API Docs",
+      icon: FileCode,
+      active: pathname.startsWith("/api/docs"),
     },
     {
       href: "/status",

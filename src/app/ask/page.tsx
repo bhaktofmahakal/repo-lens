@@ -36,16 +36,17 @@ import {
 } from "lucide-react";
 import { AskResponse, Citation, RefactorResponse } from "@/types";
 import { CohereNavbar } from "@/components/navigation/CohereNavbar";
+import { createClient } from "@/lib/supabase/client";
+import {
+  QuerySynthesisLoader,
+  RefactorAnalysisLoader,
+  FullPageCyberLoader,
+} from "@/components/ui/EngagingLoaders";
 
 type EvidenceTag = {
   id: string;
   label: string;
   count: number;
-};
-
-type LimitState = {
-  planRequired: "pro" | "team";
-  message: string;
 };
 
 type SourceItem = {
@@ -118,36 +119,6 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
   );
 }
 
-function UpgradeModal({ state, onClose }: { state: LimitState; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md">
-      <div className="w-full max-w-md rounded-xl border border-white/15 bg-[#17171c] p-6 shadow-2xl">
-        <span className="cohere-mono-label text-[10px] text-[#ff7759]">LIMIT EXCEEDED</span>
-        <h2 className="mt-1 text-base font-bold text-white font-mono">Subscription Upgrade Required</h2>
-        <p className="mt-2 text-xs text-white/70 leading-relaxed">{state.message}</p>
-        <p className="mt-2 text-[11px] font-mono text-white/50">
-          Recommended Plan: <span className="uppercase text-white font-semibold">{state.planRequired}</span>
-        </p>
-        <div className="mt-6 flex gap-2 border-t border-white/10 pt-4">
-          <Link
-            href="/dashboard/billing"
-            className="btn-cohere-primary !py-1.5 text-xs"
-          >
-            Upgrade to {state.planRequired === "pro" ? "Pro" : "Team"}
-          </Link>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-cohere-outline !py-1.5 text-xs"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function RefactorModal({
   refactorResponse,
   loading,
@@ -204,10 +175,7 @@ function RefactorModal({
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <Loader2 className="h-7 w-7 animate-spin text-white/60" />
-              <p className="font-mono text-xs text-white/50">Synthesizing architectural refactor suggestions...</p>
-            </div>
+            <RefactorAnalysisLoader />
           ) : error ? (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-xs text-red-300">
               {error}
@@ -508,8 +476,18 @@ function AskContent() {
 
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<"up" | "down" | null>(null);
-  const [limitState, setLimitState] = useState<LimitState | null>(null);
   const [copiedAnswer, setCopiedAnswer] = useState(false);
+
+  // Client-side authentication guard
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) {
+        const fullPath = window.location.pathname + window.location.search;
+        router.replace(`/login?callbackUrl=${encodeURIComponent(fullPath)}`);
+      }
+    });
+  }, [router]);
 
   // Sharing & Export states
   const [shareOpen, setShareOpen] = useState(false);
@@ -626,14 +604,6 @@ function AskContent() {
       });
 
       const data = await res.json();
-
-      if (res.status === 402 && data.code === "LIMIT_EXCEEDED") {
-        setLimitState({
-          planRequired: data.plan_required || "pro",
-          message: data.message || "Monthly question limit reached on your plan.",
-        });
-        return;
-      }
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to generate answer.");
@@ -1079,15 +1049,8 @@ function AskContent() {
             ))
           )}
 
-          {/* Loading Indicator */}
-          {loading && (
-            <div className="rounded-xl border border-white/10 bg-[#17171c] p-6 text-center">
-              <Loader2 className="mx-auto h-6 w-6 animate-spin text-white/70" />
-              <p className="mt-2 text-xs font-mono text-white/60">
-                Retrieving semantic embeddings and synthesizing answer...
-              </p>
-            </div>
-          )}
+          {/* Engaging Neural Synthesis Loader */}
+          {loading && <QuerySynthesisLoader />}
         </div>
 
         {/* Input Bar (Sticky at Bottom) */}
@@ -1125,9 +1088,6 @@ function AskContent() {
         </div>
       </main>
 
-      {/* Upgrade Modal */}
-      {limitState && <UpgradeModal state={limitState} onClose={() => setLimitState(null)} />}
-
       {/* Refactor Suggestions Modal */}
       {refactorOpen && (
         <RefactorModal
@@ -1155,9 +1115,7 @@ export default function AskPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0e0e11] text-white flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-white/60" />
-        </div>
+        <FullPageCyberLoader label="Connecting to Ask Code Intelligence Console..." />
       }
     >
       <AskContent />

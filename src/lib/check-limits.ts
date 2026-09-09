@@ -42,66 +42,14 @@ export async function getUserPlan(userId: string): Promise<PlanTier> {
   return toPlanTier(data?.plan);
 }
 
-export async function checkRepoLimit(userId: string): Promise<{ plan: PlanTier; count: number }> {
-  const plan = await getUserPlan(userId);
-  const limits = PLAN_LIMITS[plan];
-
-  if (!Number.isFinite(limits.repos_per_month)) {
-    return { plan, count: 0 };
-  }
-
-  const { start, end } = getMonthBounds();
-  const { count, error } = await supabase
-    .from("sources")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", start)
-    .lt("created_at", end);
-
-  if (error) {
-    throw new Error("Failed to check repository limits.");
-  }
-
-  const currentCount = count || 0;
-  if (currentCount >= limits.repos_per_month) {
-    throw new LimitExceededError(
-      `You reached the ${limits.repos_per_month} repositories/month limit for the ${plan} plan.`,
-      nextPlan(plan),
-    );
-  }
-
-  return { plan, count: currentCount };
+export async function checkRepoLimit(_userId: string): Promise<{ plan: PlanTier; count: number }> {
+  // RepoLens is 100% free with open developer access
+  return { plan: "team", count: 0 };
 }
 
-export async function checkQueryLimit(userId: string): Promise<{ plan: PlanTier; count: number }> {
-  const plan = await getUserPlan(userId);
-  const limits = PLAN_LIMITS[plan];
-
-  if (!Number.isFinite(limits.queries_per_month)) {
-    return { plan, count: 0 };
-  }
-
-  const { start, end } = getMonthBounds();
-  const { count, error } = await supabase
-    .from("qa_history")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", start)
-    .lt("created_at", end);
-
-  if (error) {
-    throw new Error("Failed to check query limits.");
-  }
-
-  const currentCount = count || 0;
-  if (currentCount >= limits.queries_per_month) {
-    throw new LimitExceededError(
-      `You reached the ${limits.queries_per_month} queries/month limit for the ${plan} plan.`,
-      nextPlan(plan),
-    );
-  }
-
-  return { plan, count: currentCount };
+export async function checkQueryLimit(_userId: string): Promise<{ plan: PlanTier; count: number }> {
+  // RepoLens is 100% free with open developer access
+  return { plan: "team", count: 0 };
 }
 
 export function checkRepoSize(sizeBytes: number, plan: PlanTier): void {

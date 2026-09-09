@@ -33,17 +33,10 @@ describe("check-limits", () => {
     vi.clearAllMocks();
   });
 
-  it("throws LIMIT_EXCEEDED when free repo quota is reached", async () => {
-    const fromMock = vi.mocked(supabase.from);
-    fromMock.mockImplementation((table: string) => {
-      if (table === "users") {
-        return buildUserPlanQuery("free") as never;
-      }
-
-      return buildSourceCountQuery(3) as never;
-    });
-
-    await expect(checkRepoLimit("user-1")).rejects.toBeInstanceOf(LimitExceededError);
+  it("provides unrestricted access for all users in free tool mode", async () => {
+    const result = await checkRepoLimit("user-1");
+    expect(result.plan).toBe("team");
+    expect(result.count).toBe(0);
   });
 
   it("allows repo size within the plan cap", () => {

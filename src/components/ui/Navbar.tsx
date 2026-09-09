@@ -3,28 +3,47 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Menu, X, Search, Activity, History, Zap } from "lucide-react";
+import { Menu, X, Search, Activity, History, Zap, LayoutDashboard, MessageSquare, FileCode } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { UserMenu } from "./UserMenu";
 
-const NAV_LINKS = [
+const PUBLIC_NAV_LINKS = [
   { href: "#how", label: "How it works" },
   { href: "#features", label: "Features" },
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/api/docs", label: "API Docs" },
   { href: "/status", label: "Status" },
+];
+
+const AUTH_NAV_LINKS = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/ask", label: "Ask Engine" },
   { href: "/history", label: "History" },
+  { href: "/api/docs", label: "API Docs" },
 ];
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
-  "/dashboard": <Search className="h-3.5 w-3.5" />,
+  "/dashboard": <LayoutDashboard className="h-3.5 w-3.5" />,
+  "/ask": <MessageSquare className="h-3.5 w-3.5" />,
   "/status": <Activity className="h-3.5 w-3.5" />,
   "/history": <History className="h-3.5 w-3.5" />,
+  "/api/docs": <FileCode className="h-3.5 w-3.5" />,
 };
-
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const reduce = useReducedMotion();
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setIsAuthenticated(Boolean(data.user));
+    });
+  }, []);
+
+  const navLinks = isAuthenticated ? AUTH_NAV_LINKS : PUBLIC_NAV_LINKS;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 28);
@@ -93,7 +112,7 @@ export function Navbar() {
             className="hidden items-center gap-0.5 md:flex shrink-0"
             onMouseLeave={() => setHoveredId(null)}
           >
-            {NAV_LINKS.map((link) => {
+            {navLinks.map((link) => {
               const isPage = link.href.startsWith("/");
               return (
                 <motion.div
@@ -132,13 +151,25 @@ export function Navbar() {
 
           {/* Right side: CTA + hamburger. Fixed-size container prevents layout shift on session load. */}
           <div className="flex shrink-0 items-center gap-2">
-            <div className="hidden md:block shrink-0">
-              <Link
-                href="/login"
-                className="inline-block whitespace-nowrap shrink-0 rounded-full bg-[#F04D26] px-4 py-1.5 text-xs lg:text-sm font-semibold text-white ring-0 transition-all hover:bg-[#de4723] hover:ring-2 hover:ring-[#F04D26]/30"
-              >
-                Sign In
-              </Link>
+            <div className="hidden md:flex items-center gap-2 shrink-0">
+              {isAuthenticated ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="inline-block whitespace-nowrap shrink-0 rounded-full bg-[#F04D26] px-4 py-1.5 text-xs lg:text-sm font-semibold text-white ring-0 transition-all hover:bg-[#de4723] hover:ring-2 hover:ring-[#F04D26]/30"
+                  >
+                    Dashboard
+                  </Link>
+                  <UserMenu />
+                </>
+              ) : (
+                <Link
+                  href="/login"
+                  className="inline-block whitespace-nowrap shrink-0 rounded-full bg-[#F04D26] px-4 py-1.5 text-xs lg:text-sm font-semibold text-white ring-0 transition-all hover:bg-[#de4723] hover:ring-2 hover:ring-[#F04D26]/30"
+                >
+                  Sign In
+                </Link>
+              )}
             </div>
             {/* Hamburger (mobile) */}
             <motion.button
@@ -200,7 +231,7 @@ export function Navbar() {
             >
               {/* Inner border shell */}
               <div className="rounded-[14px] border border-white/[0.04] bg-[#111111] p-2">
-                {NAV_LINKS.map((link, i) => {
+                {navLinks.map((link, i) => {
                   const isPage = link.href.startsWith("/");
                   return (
                     <motion.div
@@ -238,14 +269,25 @@ export function Navbar() {
 
                 {/* Mobile CTA */}
                 <div className="mt-1.5 border-t border-white/[0.06] pt-2">
-                  <Link
-                    href="/login"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]"
-                  >
-                    <Zap className="h-4 w-4" />
-                    Sign In &mdash; it&apos;s free
-                  </Link>
+                  {isAuthenticated ? (
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setMobileOpen(false)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]"
+                    >
+                      <LayoutDashboard className="h-4 w-4" />
+                      Go to Dashboard
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileOpen(false)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F04D26] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#de4723]"
+                    >
+                      <Zap className="h-4 w-4" />
+                      Sign In &mdash; Free Access
+                    </Link>
+                  )}
                 </div>
               </div>
             </motion.div>

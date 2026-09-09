@@ -32,6 +32,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { EnrichedGithubRepo } from "@/app/api/github/repos/route";
+import { RepoGridLoader } from "@/components/ui/EngagingLoaders";
 
 export type SourceItem = {
   id: string;
@@ -808,10 +809,7 @@ export function DashboardClient({
 
         {/* Repositories List / Grid */}
         {loadingRepos && repos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-[#141418] py-16 text-center">
-            <Loader2 className="h-6 w-6 animate-spin text-white/60" />
-            <p className="mt-3 text-xs font-mono text-white/70">Connecting to GitHub App installation...</p>
-          </div>
+          <RepoGridLoader />
         ) : reposError ? (
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-6 text-center">
             <p className="text-xs font-medium text-red-200">{reposError}</p>

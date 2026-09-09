@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { QAHistory } from "@/types";
 import { CohereNavbar } from "@/components/navigation/CohereNavbar";
+import { createClient } from "@/lib/supabase/client";
+import { HistoryLoader, FullPageCyberLoader } from "@/components/ui/EngagingLoaders";
 
 type ShareState = {
   shared: boolean;
@@ -75,6 +77,17 @@ function HistoryContent() {
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [copiedAnswerId, setCopiedAnswerId] = useState<string | null>(null);
+
+  // Client-side authentication guard
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) {
+        const fullPath = window.location.pathname + window.location.search;
+        router.replace(`/login?callbackUrl=${encodeURIComponent(fullPath)}`);
+      }
+    });
+  }, [router]);
 
   // Fetch sources list if not present or to display repo switcher
   useEffect(() => {
@@ -429,10 +442,7 @@ function HistoryContent() {
 
         {/* History List in Cohere Research-Table / Rule-Separated Layout */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-white/60" />
-            <p className="font-mono text-xs text-white/50">Loading query history...</p>
-          </div>
+          <HistoryLoader />
         ) : error ? (
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-6 text-center text-red-300">
             <p className="text-sm font-semibold">Failed to load history</p>
@@ -537,9 +547,7 @@ export default function HistoryPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0e0e11] text-white flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-white/60" />
-        </div>
+        <FullPageCyberLoader label="Connecting to Historical Query Vault..." />
       }
     >
       <HistoryContent />

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { supabase as adminSupabase } from "@/lib/db";
 import { isGithubAppConfigured } from "@/lib/github-app";
@@ -68,16 +69,19 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    redirect("/login?callbackUrl=/dashboard");
+  }
+
   let sources: SourceItem[] = [];
   let installations: InstallationItem[] = [];
   let totalChunks = 0;
   let totalQuestions = 0;
   let userPlan: PlanTier = "free";
 
-  if (user) {
-    const userId = user.id;
-    const userEmail = user.email?.toLowerCase() || "";
-    const emailPrefix = userEmail.split("@")[0]?.toLowerCase() || "";
+  const userId = user.id;
+  const userEmail = user.email?.toLowerCase() || "";
+  const emailPrefix = userEmail.split("@")[0]?.toLowerCase() || "";
 
     // 1. Fetch user sources
     const { data: sourceRows } = await supabase
@@ -149,9 +153,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         }
       }
     }
-  }
 
-  const planLimit = PLAN_LIMITS[userPlan]?.repos_per_month ?? 3;
+  const planLimit = 999;
 
   return (
     <DashboardClient
