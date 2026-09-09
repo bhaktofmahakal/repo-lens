@@ -16,12 +16,12 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // Next.js requires unsafe-inline for styles; framer-motion injects inline styles
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
       "font-src 'self' data: https://fonts.gstatic.com",
       // unsafe-eval only in dev (webpack HMR); stripped from production
-      `script-src 'self' 'unsafe-inline' https://vercel.live ${posthogSources.join(" ")}${isDev ? " 'unsafe-eval'" : ""}`,
-      "img-src 'self' data: blob:",
-      `connect-src 'self' https://vercel.live ${posthogSources.join(" ")}${supabaseUrl ? ` ${supabaseUrl}` : ""}`,
+      `script-src 'self' 'unsafe-inline' https://vercel.live https://cdn.jsdelivr.net ${posthogSources.join(" ")}${isDev ? " 'unsafe-eval'" : ""}`,
+      "img-src 'self' data: blob: https://validator.swagger.io",
+      `connect-src 'self' https://vercel.live https://cdn.jsdelivr.net ${posthogSources.join(" ")}${supabaseUrl ? ` ${supabaseUrl}` : ""}`,
       "frame-src 'self' https://vercel.live",
       "object-src 'none'",
       "base-uri 'self'",

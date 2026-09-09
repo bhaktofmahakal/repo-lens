@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock,
   Database,
@@ -104,6 +105,7 @@ export function DashboardClient({
   const [quickAskSourceId, setQuickAskSourceId] = useState<string>(
     initialSources.length > 0 ? initialSources[0].id : "",
   );
+  const [quickAskDropdownOpen, setQuickAskDropdownOpen] = useState(false);
 
   const [feedback, setFeedback] = useState<{
     type: "success" | "error" | "info";
@@ -426,18 +428,72 @@ export function DashboardClient({
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <select
-                value={quickAskSourceId}
-                onChange={(e) => setQuickAskSourceId(e.target.value)}
-                className="rounded-full border border-white/10 bg-[#141418] px-3.5 py-2.5 text-xs text-white font-mono focus:border-white/30 focus:outline-none max-w-[180px] truncate"
-              >
-                {sources.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-[#17171c] text-white">
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Custom Cohere Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setQuickAskDropdownOpen(!quickAskDropdownOpen)}
+                  className="flex items-center gap-2 rounded-full border border-white/15 bg-[#141418] hover:bg-[#1a1a20] hover:border-white/25 px-3.5 py-2 text-xs text-white transition-all shadow-sm"
+                >
+                  <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white/5 text-white/70">
+                    {sources.find((s) => s.id === quickAskSourceId)?.type === "github" ? (
+                      <Github className="h-2.5 w-2.5" />
+                    ) : (
+                      <Database className="h-2.5 w-2.5 text-[#ff7759]" />
+                    )}
+                  </div>
+                  <span className="font-mono text-[11px] font-medium text-white max-w-[120px] sm:max-w-[150px] truncate">
+                    {sources.find((s) => s.id === quickAskSourceId)?.name || "Select Repository"}
+                  </span>
+                  <ChevronDown className={`h-3 w-3 text-white/40 transition-transform ${quickAskDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {quickAskDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setQuickAskDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 sm:left-0 top-full z-40 mt-1.5 w-64 rounded-xl border border-white/15 bg-[#17171c] p-1.5 shadow-2xl backdrop-blur-xl">
+                      <div className="px-2.5 py-1.5 border-b border-white/[0.08] flex items-center justify-between">
+                        <span className="cohere-mono-label text-[9px]">ACTIVE REPOSITORY</span>
+                        <span className="text-[10px] font-mono text-white/40">{sources.length} indexed</span>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-0.5 mt-1">
+                        {sources.map((s) => {
+                          const isSelected = s.id === quickAskSourceId;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => {
+                                setQuickAskSourceId(s.id);
+                                setQuickAskDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
+                                isSelected
+                                  ? "bg-white/10 text-white font-semibold"
+                                  : "text-white/70 hover:bg-white/5 hover:text-white"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                {s.type === "github" ? (
+                                  <Github className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                                ) : (
+                                  <FileCode className="h-3.5 w-3.5 shrink-0 text-[#ff7759]" />
+                                )}
+                                <span className="font-mono text-[11px] truncate">{s.name}</span>
+                              </div>
+                              {isSelected && <Check className="h-3 w-3 text-emerald-400 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <button
                 type="submit"
@@ -501,15 +557,15 @@ export function DashboardClient({
         {/* Card 1: Repositories Indexed */}
         <div className="rounded-xl border border-white/10 bg-[#17171c] p-5 transition-all hover:border-white/20">
           <div className="flex items-center justify-between">
-            <span className="cohere-mono-label text-[10px]">REPOSITORIES</span>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/70">
-              <Github className="h-3.5 w-3.5 text-[#ff7759]" />
-            </div>
+            <span className="cohere-mono-label text-[10px]">AST CODEBASES</span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/60">
+              QUOTA
+            </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-bold tracking-tight text-white font-mono">{kpi.totalSources}</span>
             <span className="text-xs text-white/40 font-mono">
-              / {Number.isFinite(kpi.planLimit) ? kpi.planLimit : "∞"} max
+              / {Number.isFinite(kpi.planLimit) ? kpi.planLimit : "∞"} active
             </span>
           </div>
           {Number.isFinite(kpi.planLimit) && (
@@ -527,10 +583,10 @@ export function DashboardClient({
         {/* Card 2: Knowledge Base Chunks */}
         <div className="rounded-xl border border-white/10 bg-[#17171c] p-5 transition-all hover:border-white/20">
           <div className="flex items-center justify-between">
-            <span className="cohere-mono-label text-[10px]">CODE CHUNKS</span>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/70">
-              <Layers className="h-3.5 w-3.5 text-emerald-400" />
-            </div>
+            <span className="cohere-mono-label text-[10px]">VECTOR REPOSITORY</span>
+            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] text-emerald-400">
+              PGVECTOR
+            </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-bold tracking-tight text-white font-mono">
@@ -538,28 +594,28 @@ export function DashboardClient({
             </span>
             <span className="text-xs text-white/40 font-mono">vectors</span>
           </div>
-          <p className="mt-2 text-[11px] text-white/40 font-mono">768-dim semantic embeddings</p>
+          <p className="mt-2 text-[11px] text-white/40 font-mono">768-dim mpnet embeddings</p>
         </div>
 
         {/* Card 3: Questions Answered */}
         <div className="rounded-xl border border-white/10 bg-[#17171c] p-5 transition-all hover:border-white/20">
           <div className="flex items-center justify-between">
-            <span className="cohere-mono-label text-[10px]">QUERIES ANALYZED</span>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/70">
-              <MessageSquare className="h-3.5 w-3.5 text-blue-400" />
-            </div>
+            <span className="cohere-mono-label text-[10px]">INFERENCE SESSIONS</span>
+            <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[9px] text-blue-400">
+              GROQ 70B
+            </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-bold tracking-tight text-white font-mono">
               {kpi.totalQuestions.toLocaleString()}
             </span>
-            <span className="text-xs text-white/40 font-mono">queries</span>
+            <span className="text-xs text-white/40 font-mono">inquiries</span>
           </div>
           <Link
             href="/history"
             className="mt-2 inline-flex items-center gap-1 text-[11px] text-white/60 hover:text-white underline underline-offset-4"
           >
-            <span>Audit history</span>
+            <span>Query audit log</span>
             <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
@@ -567,15 +623,15 @@ export function DashboardClient({
         {/* Card 4: Plan & Auto-Sync */}
         <div className="rounded-xl border border-white/10 bg-[#17171c] p-5 transition-all hover:border-white/20">
           <div className="flex items-center justify-between">
-            <span className="cohere-mono-label text-[10px]">SYNC PIPELINE</span>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/70">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-            </div>
+            <span className="cohere-mono-label text-[10px]">CONTINUOUS SYNC</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] text-emerald-400 font-semibold">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {hasLinkedInstallation ? "LIVE" : "STANDBY"}
+            </span>
           </div>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-sm font-semibold font-mono text-emerald-300">
-              {hasLinkedInstallation ? "Auto-Sync Ready" : "Setup App"}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-xl font-bold tracking-tight text-white font-mono">
+              {hasLinkedInstallation ? "Webhook Active" : "App Standby"}
             </span>
           </div>
           <p className="mt-2 text-[11px] text-white/40 font-mono truncate">

@@ -49,20 +49,20 @@ export function Navbar() {
       paddingBottom: 8,
     },
     scrolled: {
-      maxWidth: "760px",
-      width: "92%",
+      maxWidth: "880px",
+      width: "94%",
       borderRadius: 9999,
-      backgroundColor: "rgba(22,22,22,0.88)",
-      borderColor: "rgba(255,255,255,0.08)",
-      paddingTop: 10,
-      paddingBottom: 10,
+      backgroundColor: "rgba(22,22,22,0.92)",
+      borderColor: "rgba(255,255,255,0.1)",
+      paddingTop: 8,
+      paddingBottom: 8,
     },
   };
 
   return (
     <>
       {/* Desktop / tablet header */}
-      <div className="fixed left-0 right-0 top-0 z-50 flex justify-center px-4 pt-4">
+      <div className="fixed left-0 right-0 top-0 z-50 flex justify-center px-4 pt-3">
         <motion.div
           initial={false}
           animate={scrolled ? "scrolled" : "top"}
@@ -73,7 +73,7 @@ export function Navbar() {
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
           }}
-          className="flex w-full items-center justify-between gap-4 px-5"
+          className="flex w-full items-center justify-between gap-2 lg:gap-4 px-4 sm:px-5"
         >
           {/* Brand mark */}
           <Link href="/" className="group flex shrink-0 items-center gap-2">
@@ -83,14 +83,14 @@ export function Navbar() {
                 <line x1="15" y1="14" x2="19" y2="18" stroke="#F04D26" strokeWidth="2.2" strokeLinecap="round" />
               </svg>
             </span>
-            <span className="text-sm font-semibold tracking-tight text-white">
+            <span className="text-sm font-semibold tracking-tight text-white whitespace-nowrap">
               Repo<span className="text-[#F04D26]">Lens</span>
             </span>
           </Link>
 
           {/* Desktop nav links */}
           <nav
-            className="hidden items-center gap-0.5 md:flex"
+            className="hidden items-center gap-0.5 md:flex shrink-0"
             onMouseLeave={() => setHoveredId(null)}
           >
             {NAV_LINKS.map((link) => {
@@ -98,7 +98,7 @@ export function Navbar() {
               return (
                 <motion.div
                   key={link.href}
-                  className="relative"
+                  className="relative shrink-0"
                   onMouseEnter={() => setHoveredId(link.href)}
                 >
                   {hoveredId === link.href && (
@@ -112,17 +112,17 @@ export function Navbar() {
                   {isPage ? (
                     <Link
                       href={link.href}
-                      className="relative z-10 flex items-center gap-1.5 px-3.5 py-1.5 text-sm text-white/50 transition-colors hover:text-white"
+                      className="relative z-10 flex items-center gap-1.5 px-2.5 lg:px-3.5 py-1.5 text-xs lg:text-sm font-medium whitespace-nowrap text-white/60 transition-colors hover:text-white"
                     >
                       {NAV_ICONS[link.href]}
-                      {link.label}
+                      <span>{link.label}</span>
                     </Link>
                   ) : (
                     <a
                       href={link.href}
-                      className="relative z-10 flex items-center gap-1.5 px-3.5 py-1.5 text-sm text-white/50 transition-colors hover:text-white"
+                      className="relative z-10 flex items-center gap-1.5 px-2.5 lg:px-3.5 py-1.5 text-xs lg:text-sm font-medium whitespace-nowrap text-white/60 transition-colors hover:text-white"
                     >
-                      {link.label}
+                      <span>{link.label}</span>
                     </a>
                   )}
                 </motion.div>
@@ -131,11 +131,11 @@ export function Navbar() {
           </nav>
 
           {/* Right side: CTA + hamburger. Fixed-size container prevents layout shift on session load. */}
-          <div className="flex items-center gap-2">
-            <div className="hidden md:block">
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="hidden md:block shrink-0">
               <Link
                 href="/login"
-                className="rounded-full bg-[#F04D26] px-4 py-1.5 text-sm font-semibold text-white ring-0 transition-all hover:bg-[#de4723] hover:ring-2 hover:ring-[#F04D26]/30"
+                className="inline-block whitespace-nowrap shrink-0 rounded-full bg-[#F04D26] px-4 py-1.5 text-xs lg:text-sm font-semibold text-white ring-0 transition-all hover:bg-[#de4723] hover:ring-2 hover:ring-[#F04D26]/30"
               >
                 Sign In
               </Link>
