@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -309,20 +309,20 @@ export default function Home() {
         <div className="relative z-10 mx-auto w-[90%] max-w-[1200px] grid grid-cols-2 gap-0 md:grid-cols-5">
           {([
             { heading: "Product", links: [
+              { label: "Dashboard", href: "/dashboard" },
               { label: "Ask AI", href: "/ask" },
-              { label: "Ingest ZIP", href: "#ingest" },
-              { label: "GitHub Ingest", href: "#ingest" },
+              { label: "Ingest Repository", href: "/dashboard" },
               { label: "Q&A History", href: "/history" },
             ]},
             { heading: "Explore", links: [
               { label: "How it Works", href: "#how" },
               { label: "Features", href: "#features" },
-              { label: "Try it Free", href: "#ingest" },
+              { label: "Try it Free", href: "/login" },
             ]},
             { heading: "Tools", links: [
               { label: "Vector Search", href: "#features" },
               { label: "Citation Engine", href: "#features" },
-              { label: "Source Browser", href: "/source" },
+              { label: "Workspace Hub", href: "/dashboard" },
               { label: "System Status", href: "/status" },
             ]},
             { heading: "Community", links: [
@@ -331,9 +331,9 @@ export default function Home() {
               { label: "Twitter / X", href: "https://x.com/Utsav_mishraa", external: true },
             ]},
             { heading: "Legal", links: [
-              { label: "Privacy Policy", href: "#" },
-              { label: "Terms of Service", href: "#" },
               { label: "MIT License", href: "https://github.com/bhaktofmahakal/repo-lens/blob/main/LICENSE", external: true },
+              { label: "OpenAPI Docs", href: "/api/docs", external: false },
+              { label: "System Status", href: "/status", external: false },
             ]},
           ] as const).map((col, ci) => (
             <div key={col.heading} className={`relative px-6 py-3 ${ci < 4 ? "md:border-r md:border-white/[0.06]" : ""}`}>
@@ -372,8 +372,9 @@ export default function Home() {
         <div className="relative z-10 mx-auto flex w-[90%] max-w-[1200px] flex-wrap items-center justify-between gap-3 py-5 text-sm text-white/25">
           <span>© 2026 Repo Lens. All rights reserved.</span>
           <div className="flex gap-5">
-            <a href="#" className="transition-colors hover:text-white">Privacy Policy</a>
-            <a href="#" className="transition-colors hover:text-white">Terms of Service</a>
+            <Link href="/status" className="transition-colors hover:text-white">Status</Link>
+            <Link href="/api/docs" className="transition-colors hover:text-white">API Docs</Link>
+            <a href="https://github.com/bhaktofmahakal/repo-lens/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">License</a>
           </div>
         </div>
 

@@ -8,15 +8,17 @@ import { Menu, X, Search, Activity, History, Zap } from "lucide-react";
 const NAV_LINKS = [
   { href: "#how", label: "How it works" },
   { href: "#features", label: "Features" },
-  { href: "#ingest", label: "Try it" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/status", label: "Status" },
   { href: "/history", label: "History" },
 ];
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
+  "/dashboard": <Search className="h-3.5 w-3.5" />,
   "/status": <Activity className="h-3.5 w-3.5" />,
   "/history": <History className="h-3.5 w-3.5" />,
 };
+
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
