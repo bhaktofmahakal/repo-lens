@@ -51,6 +51,6 @@ describe("check-limits", () => {
   });
 
   it("throws when repository size exceeds plan cap", () => {
-    expect(() => checkRepoSize(30 * 1024 * 1024, "free")).toThrow(LimitExceededError);
+    expect(() => checkRepoSize(50 * 1024 * 1024, "free")).toThrow(LimitExceededError);
   });
 });

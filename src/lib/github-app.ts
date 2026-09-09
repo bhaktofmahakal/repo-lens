@@ -151,3 +151,96 @@ export async function getInstallationById(
     accountType: data.account?.type || "User",
   };
 }
+
+export type GithubRepositoryItem = {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  html_url: string;
+  description: string | null;
+  default_branch: string;
+  stargazers_count: number;
+  language: string | null;
+  updated_at: string;
+  pushed_at?: string;
+  owner: {
+    login: string;
+    avatar_url?: string;
+    type?: string;
+  };
+  installation_id?: number;
+};
+
+export async function getInstallationRepositories(
+  installationId: number,
+  page = 1,
+  perPage = 100,
+): Promise<{ total_count: number; repositories: GithubRepositoryItem[] }> {
+  const token = await getInstallationAccessToken(installationId);
+  const response = await fetch(
+    `${GITHUB_API_BASE}/installation/repositories?page=${page}&per_page=${perPage}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "RepoLens",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(
+      `Failed to fetch repositories for installation ${installationId}: ${response.status} ${errorText}`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    total_count: number;
+    repositories: Array<{
+      id: number;
+      name: string;
+      full_name: string;
+      private: boolean;
+      html_url: string;
+      description: string | null;
+      default_branch: string;
+      stargazers_count: number;
+      language: string | null;
+      updated_at: string;
+      pushed_at?: string;
+      owner?: {
+        login?: string;
+        avatar_url?: string;
+        type?: string;
+      };
+    }>;
+  };
+
+  const repositories: GithubRepositoryItem[] = (data.repositories || []).map((repo) => ({
+    id: repo.id,
+    name: repo.name,
+    full_name: repo.full_name,
+    private: Boolean(repo.private),
+    html_url: repo.html_url,
+    description: repo.description ?? null,
+    default_branch: repo.default_branch || "main",
+    stargazers_count: repo.stargazers_count || 0,
+    language: repo.language ?? null,
+    updated_at: repo.updated_at,
+    pushed_at: repo.pushed_at,
+    owner: {
+      login: repo.owner?.login || "unknown",
+      avatar_url: repo.owner?.avatar_url,
+      type: repo.owner?.type || "User",
+    },
+    installation_id: installationId,
+  }));
+
+  return {
+    total_count: data.total_count ?? repositories.length,
+    repositories,
+  };
+}
