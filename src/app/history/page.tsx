@@ -82,8 +82,8 @@ function HistoryContent() {
   // Client-side authentication guard
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
+    supabase.auth.getUser().then((res) => {
+      if (!res.data?.user) {
         const fullPath = window.location.pathname + window.location.search;
         router.replace(`/login?callbackUrl=${encodeURIComponent(fullPath)}`);
       }

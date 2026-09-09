@@ -266,7 +266,7 @@ function printCyberneticSpinner(phases) {
   const phaseList = Array.isArray(phases) && phases.length > 0 ? phases : [
     "Vector embedding retrieval...",
     "Cosine similarity search...",
-    "Groq Llama 3.3 70B synthesis...",
+    "Groq Qwen 3.8 27B / GPT-OSS synthesis...",
   ];
 
   const timer = setInterval(() => {
@@ -329,7 +329,7 @@ function renderFormattedAnswer(data) {
   }
 
   if (data.latencyMs) {
-    console.log(`\n${c.gray}⚡ Groq Llama 3.3 70B inference completed in ${data.latencyMs}ms${c.reset}\n`);
+    console.log(`\n${c.gray}⚡ Groq Qwen 3.8 / GPT-OSS inference completed in ${data.latencyMs}ms${c.reset}\n`);
   }
 }
 
@@ -593,7 +593,7 @@ async function cmdStatus({ options, positionals }) {
   console.log(`- ${c.bold}Vector Index:${c.reset} ${c.green}${data.status} (Supabase pgvector 768-D)${c.reset}`);
   console.log(`- ${c.bold}AST Chunks:${c.reset}   ${data.chunk_count}`);
   console.log(`- ${c.bold}Embedding:${c.reset}    sentence-transformers/all-mpnet-base-v2`);
-  console.log(`- ${c.bold}Inference:${c.reset}    Groq Llama 3.3 70B Versatile\n`);
+  console.log(`- ${c.bold}Inference:${c.reset}    Groq Qwen 3.8 27B / GPT-OSS 120B\n`);
 }
 
 async function cmdAsk({ options, positionals }) {

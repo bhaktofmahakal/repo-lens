@@ -8,7 +8,7 @@ The RepoLens CLI brings enterprise-grade AI repository interrogation directly to
 
 ## ⚡ Key Capabilities
 
-- **🧠 Multi-Tier Semantic Retrieval**: Powered by Groq Cloud (`llama-3.3-70b-versatile`) with Hugging Face `all-mpnet-base-v2` 768-D embeddings in Supabase `pgvector`.
+- **🧠 Multi-Tier Semantic Retrieval**: Powered by Groq Cloud (`qwen/qwen3.8-27b` & `openai/gpt-oss-120b`) with Hugging Face `all-mpnet-base-v2` 768-D embeddings in Supabase `pgvector`.
 - **📍 Grounded Line Citations**: Every answer includes exact source file paths and line ranges (`path/file.ts:L14-L85`).
 - **🎯 Local Git Remote Auto-Detection**: Automatically identifies your active repository from `git remote get-url origin`—no need to copy and paste repository UUIDs manually.
 - **💬 Interactive Chat REPL**: Multi-turn conversation mode with slash commands (`/repos`, `/switch <id>`, `/clear`, `/exit`).

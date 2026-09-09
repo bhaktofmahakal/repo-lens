@@ -702,7 +702,7 @@ class RepoLensSidebarProvider {
     function setTelemetry(active, message) {
       if (active) {
         tickerBox.style.display = "block";
-        tickerMsg.textContent = message || "Synthesizing answer via Groq Llama 3.3 70B...";
+        tickerMsg.textContent = message || "Synthesizing answer via Groq Qwen 3.8 27B / GPT-OSS...";
         metaStatus.textContent = "Thinking...";
       } else {
         tickerBox.style.display = "none";
@@ -889,7 +889,7 @@ class RepoLensSidebarProvider {
             return;
           }
 
-          this.post({ type: "busy", text: "Synthesizing answer via Groq Llama 3.3 70B..." });
+          this.post({ type: "busy", text: "Synthesizing answer via Groq Qwen 3.8 27B / GPT-OSS..." });
           const payload = await askRepoQuestion(this.context, repoId, question);
           const citations = Array.isArray(payload?.citations)
             ? payload.citations.map(normalizeCitation).filter(Boolean).map(toWebCitation)
@@ -926,7 +926,7 @@ async function askQuestion(context) {
   }
 
   const question = await vscode.window.showInputBox({
-    title: "Ask RepoLens (Groq Llama 3.3 70B)",
+    title: "Ask RepoLens (Groq Qwen 3.8 / GPT-OSS)",
     prompt: "Ask a question about this repository",
     ignoreFocusOut: true,
   });

@@ -5,7 +5,7 @@
 RepoLens turns your workspace into an interactive, grounded AI knowledge engine. Ask architectural questions, investigate unfamiliar modules, and trigger AI-assisted refactoring suggestions—with verified line-range citations that open directly to the source in your editor.
 
 [![VS Code](https://img.shields.io/badge/VS_Code-1.90+-007ACC?style=flat&logo=visualstudiocode)](https://code.visualstudio.com/)
-[![Groq](https://img.shields.io/badge/Groq-Llama_3.3_70B-orange?style=flat)](https://groq.com/)
+[![Groq](https://img.shields.io/badge/Groq-Qwen_3.8_27B_·_GPT--OSS-orange?style=flat)](https://groq.com/)
 [![pgvector](https://img.shields.io/badge/Supabase-pgvector-emerald?style=flat&logo=supabase)](https://supabase.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat)](LICENSE)
 

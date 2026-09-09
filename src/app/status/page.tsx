@@ -50,7 +50,7 @@ function StatusContent() {
       title: "Groq Cloud LLM Inference",
       state: status?.llm,
       icon: Cpu,
-      desc: "Ultra-low-latency Llama 3.3 70B inference engine",
+      desc: "Ultra-low-latency Qwen 3.8 27B & GPT-OSS inference engine",
     },
   ];
 

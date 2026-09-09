@@ -19,7 +19,7 @@ vi.mock("@/lib/posthog", () => ({
 import { requireRequestAuth } from "@/lib/auth-guard";
 import { isSupabaseConfigured, supabase } from "@/lib/db";
 import { capturePosthogEvent } from "@/lib/posthog";
-import { POST } from "@/app/api/share/route";
+import { POST, DELETE } from "@/app/api/share/route";
 
 const USER_ID = "00000000-0000-0000-0000-000000000001";
 const SOURCE_ID = "00000000-0000-0000-0000-000000000002";
@@ -77,5 +77,37 @@ describe("POST /api/share", () => {
     expect(typeof payload.share_url).toBe("string");
     expect(payload.share_url).toContain(`/s/${SHARE_UUID}`);
     expect(vi.mocked(capturePosthogEvent)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DELETE /api/share", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(isSupabaseConfigured).mockReturnValue(true);
+    vi.mocked(requireRequestAuth).mockResolvedValue({ user: { id: USER_ID } } as never);
+  });
+
+  it("revokes a share link using query parameters without body", async () => {
+    const updateQuery = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+    };
+    // The second eq returns { error: null }
+    updateQuery.eq.mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    });
+
+    vi.mocked(supabase.from).mockReturnValue(updateQuery as never);
+
+    const req = new NextRequest(
+      `http://localhost:3000/api/share?sourceId=${SOURCE_ID}`,
+      { method: "DELETE" },
+    );
+
+    const res = await DELETE(req);
+    const payload = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(payload.success).toBe(true);
   });
 });

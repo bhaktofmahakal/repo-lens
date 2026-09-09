@@ -315,6 +315,8 @@ function ShareModal({
       setError(null);
       const res = await fetch(`/api/share?sourceId=${encodeURIComponent(sourceId)}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -781,7 +783,7 @@ function AskContent() {
               <span className="cohere-mono-label">ACTIVE INTERROGATION REPO</span>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               <span className="font-mono text-[11px] text-emerald-400 uppercase tracking-wider">
-                Groq Llama 3.3 Active
+                Groq Qwen 3.8 / GPT-OSS Active
               </span>
             </div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-white font-mono sm:text-3xl">

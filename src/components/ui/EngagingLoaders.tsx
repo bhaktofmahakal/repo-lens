@@ -24,7 +24,7 @@ export function QuerySynthesisLoader() {
     },
     {
       icon: Cpu,
-      title: "Groq Llama 3.3 70B Synthesis",
+      title: "Groq Qwen 3.8 27B / GPT-OSS Synthesis",
       desc: "Streaming neural inference (~280 tokens/sec) over retrieved evidence...",
     },
     {
@@ -67,7 +67,7 @@ export function QuerySynthesisLoader() {
 
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-white/60">
-            GROQ LLAMA-3.3 70B
+            GROQ QWEN-3.8 27B · GPT-OSS
           </span>
           <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-emerald-300">
             ELAPSED: {elapsed.toFixed(1)}s

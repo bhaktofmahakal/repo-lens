@@ -187,17 +187,18 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const parsed = z.object({ sourceId: z.string().uuid() }).safeParse(body);
+    let sourceId = req.nextUrl.searchParams.get("sourceId");
+    if (!sourceId) {
+      const body = await req.json().catch(() => ({}));
+      sourceId = body?.sourceId;
+    }
 
-    if (!parsed.success) {
+    if (!sourceId || !UUID_RE.test(String(sourceId))) {
       return NextResponse.json(
-        { error: "Invalid request payload.", code: "VALIDATION_ERROR" },
+        { error: "Valid sourceId is required.", code: "VALIDATION_ERROR" },
         { status: 400 },
       );
     }
-
-    const { sourceId } = parsed.data;
 
     const { error: revokeError } = await supabase
       .from("shared_sessions")
@@ -206,7 +207,7 @@ export async function DELETE(req: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq("owner_user_id", auth.user.id)
-      .eq("source_id", sourceId);
+      .eq("source_id", String(sourceId));
 
     if (revokeError) {
       return NextResponse.json(
@@ -216,7 +217,8 @@ export async function DELETE(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error("Failed to revoke share link:", err);
     return NextResponse.json(
       { error: "Failed to revoke share link.", code: "INTERNAL_SERVER_ERROR" },
       { status: 500 },
